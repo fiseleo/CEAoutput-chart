@@ -49,6 +49,8 @@
   .datasets .chip .x{cursor:pointer;font-weight:700;opacity:.7}
   .datasets .chip .x:hover{opacity:1}
   .compareControls{display:flex;gap:8px;align-items:center}
+  #tableFilter{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;width:180px}
+  #tableFilter::placeholder{color:var(--muted)}
   .transportCard{display:none}
   body.hasTransport .transportCard{display:block}
   #dataTableWrap{max-height:520px;overflow:auto}
@@ -80,6 +82,13 @@
         <option value="throat">Throat</option>
       </select>
     </label>
+    <label>X axis
+      <select id="xAxis">
+        <option value="of" selected>O/F ratio</option>
+        <option value="pin">Pressure</option>
+        <option value="aeat">Area ratio</option>
+      </select>
+    </label>
     <label>Font size
       <select id="fontSize">
         <option value="12">Small</option>
@@ -102,6 +111,7 @@
       </select>
     </label>
     <button id="exportBtn">Export CSV</button>
+    <button id="exportJsonBtn">Export JSON</button>
     <button id="printBtn">Print</button>
     <label>Mass fraction pressure
       <select id="mfPressure"></select>
@@ -146,22 +156,22 @@
         <option value="min|Isp">min Isp</option>
         <option value="max|CSTAR">max C*</option>
         <option value="min|CSTAR">min C*</option>
-        <option value="max|T">max Tc</option>
-        <option value="min|T">min Tc</option>
+        <option value="max|T">max T</option>
+        <option value="min|T">min T</option>
         <option value="max|MW">max MW</option>
         <option value="min|MW">min MW</option>
       </select>
     </h2>
     <button class="saveBtn" id="exportSummaryBtn" title="Export summary as CSV">Export CSV</button>
   </div><div id="summaryTable"></div></div>
-  <div class="card"><div class="card-head"><h2>Specific Impulse vs O/F</h2><button class="saveBtn" data-chart="chIsp" title="Save as image">Save</button></div><div class="chart" id="chIsp"></div></div>
-  <div class="card"><div class="card-head"><h2>Temperature vs O/F</h2><button class="saveBtn" data-chart="chT" title="Save as image">Save</button></div><div class="chart" id="chT"></div></div>
-  <div class="card"><div class="card-head"><h2>Characteristic Velocity C* vs O/F</h2><button class="saveBtn" data-chart="chCstar" title="Save as image">Save</button></div><div class="chart" id="chCstar"></div></div>
-  <div class="card"><div class="card-head"><h2>Molecular Weight vs O/F</h2><button class="saveBtn" data-chart="chMW" title="Save as image">Save</button></div><div class="chart" id="chMW"></div></div>
-  <div class="card"><div class="card-head"><h2>Specific Heat Ratio γ vs O/F</h2><button class="saveBtn" data-chart="chGamma" title="Save as image">Save</button></div><div class="chart" id="chGamma"></div></div>
-  <div class="card"><div class="card-head"><h2>Sound Velocity vs O/F</h2><button class="saveBtn" data-chart="chSonvel" title="Save as image">Save</button></div><div class="chart" id="chSonvel"></div></div>
-  <div class="card"><div class="card-head"><h2>Thrust Coefficient CF vs O/F</h2><button class="saveBtn" data-chart="chCF" title="Save as image">Save</button></div><div class="chart" id="chCF"></div></div>
-  <div class="card"><div class="card-head"><h2>Vacuum Isp vs O/F</h2><button class="saveBtn" data-chart="chIvac" title="Save as image">Save</button></div><div class="chart" id="chIvac"></div></div>
+  <div class="card"><div class="card-head"><h2>Specific Impulse</h2><button class="saveBtn" data-chart="chIsp" title="Save as image">Save</button></div><div class="chart" id="chIsp"></div></div>
+  <div class="card"><div class="card-head"><h2>Temperature</h2><button class="saveBtn" data-chart="chT" title="Save as image">Save</button></div><div class="chart" id="chT"></div></div>
+  <div class="card"><div class="card-head"><h2>Characteristic Velocity C*</h2><button class="saveBtn" data-chart="chCstar" title="Save as image">Save</button></div><div class="chart" id="chCstar"></div></div>
+  <div class="card"><div class="card-head"><h2>Molecular Weight</h2><button class="saveBtn" data-chart="chMW" title="Save as image">Save</button></div><div class="chart" id="chMW"></div></div>
+  <div class="card"><div class="card-head"><h2>Specific Heat Ratio γ</h2><button class="saveBtn" data-chart="chGamma" title="Save as image">Save</button></div><div class="chart" id="chGamma"></div></div>
+  <div class="card"><div class="card-head"><h2>Sound Velocity</h2><button class="saveBtn" data-chart="chSonvel" title="Save as image">Save</button></div><div class="chart" id="chSonvel"></div></div>
+  <div class="card"><div class="card-head"><h2>Thrust Coefficient CF</h2><button class="saveBtn" data-chart="chCF" title="Save as image">Save</button></div><div class="chart" id="chCF"></div></div>
+  <div class="card"><div class="card-head"><h2>Vacuum Isp</h2><button class="saveBtn" data-chart="chIvac" title="Save as image">Save</button></div><div class="chart" id="chIvac"></div></div>
   <div class="card"><div class="card-head"><h2>Isp vs Chamber Temperature</h2><button class="saveBtn" data-chart="chIspTc" title="Save as image">Save</button></div><div class="chart" id="chIspTc"></div></div>
   <div class="card"><div class="card-head"><h2>Mass Fractions vs O/F</h2><button class="saveBtn" data-chart="chMF" title="Save as image">Save</button></div><div class="chart" id="chMF"></div></div>
   <div class="card full"><div class="card-head"><h2>Performance Map</h2><button class="saveBtn" data-chart="chHeat" title="Save as image">Save</button></div><div class="chart" id="chHeat"></div></div>
@@ -173,6 +183,10 @@
     <div class="card-head">
       <h2>Compare datasets</h2>
       <div class="compareControls">
+        <select id="compareMode">
+          <option value="of" selected>vs O/F</option>
+          <option value="bestof">Best O/F vs pressure</option>
+        </select>
         <select id="compareMetric">
           <option value="Isp" selected>Isp</option>
           <option value="CSTAR">C*</option>
@@ -185,7 +199,7 @@
     </div>
     <div class="chart" id="chCompare"></div>
   </div>
-  <div class="card full"><div class="card-head"><h2>Data table</h2><button class="saveBtn" id="exportDataBtn" title="Export as CSV">Export CSV</button></div><div id="dataTableWrap"><table class="datatable" id="dataTable"></table></div></div>
+  <div class="card full"><div class="card-head"><h2>Data table</h2><input id="tableFilter" placeholder="Search…" title="Filter rows (Pin, O/F, or any value)"><button class="saveBtn" id="exportDataBtn" title="Export as CSV">Export CSV</button></div><div id="dataTableWrap"><table class="datatable" id="dataTable"></table></div></div>
 </div>
 
 <script>
@@ -198,9 +212,36 @@ function getSorted(data){
   return { pins, ofs };
 }
 
+function exitIndex(station){
+  if(typeof station !== "string" || station.indexOf("exit:") !== 0) return -1;
+  const i = parseInt(station.slice(5), 10);
+  return isNaN(i) ? -1 : i;
+}
+
+function stationObj(c, station){
+  if(station === "chamber") return { props: c.chamber, perf: c.perf, kind: "chamber" };
+  if(station === "throat") return { props: c.throat, perf: c.perf, kind: "throat" };
+  const i = exitIndex(station);
+  if(i >= 0 && c.exits && c.exits[i]) return { props: c.exits[i].props, perf: c.exits[i].perf, exit: c.exits[i], kind: "exit" };
+  return null;
+}
+
 function getVal(c, station, field){
-  if(field in c.perf) return c.perf[field];
-  return station === "chamber" ? c.chamber[field] : c.throat[field];
+  const st = stationObj(c, station);
+  if(!st) return undefined;
+  if(st.perf && field in st.perf){
+    const v = st.perf[field];
+    if(v !== undefined && v !== null && !isNaN(v)) return v;
+  }
+  return st.props[field];
+}
+
+function massfracVal(c, station, sp){
+  if(station === "chamber") return c.massfrac[sp] ? c.massfrac[sp][0] : undefined;
+  if(station === "throat") return c.massfrac[sp] ? c.massfrac[sp][1] : undefined;
+  const i = exitIndex(station);
+  if(i >= 0 && c.exits && c.exits[i] && c.exits[i].massfrac) return c.exits[i].massfrac[sp];
+  return undefined;
 }
 
 function seriesFor(data, pin, station, field){
@@ -214,13 +255,37 @@ function seriesFor(data, pin, station, field){
   return { x, y };
 }
 
+function seriesForOf(data, of, station, field){
+  const pins = [...new Set(data.cases.filter(c => c.of === of).map(c => c.pin))].sort((a,b) => a-b);
+  const x = [], y = [];
+  for(const pin of pins){
+    const c = data.cases.find(c => c.pin === pin && c.of === of);
+    const v = c ? getVal(c, station, field) : undefined;
+    if(v !== undefined && v !== null && !isNaN(v)){ x.push(pin); y.push(v); }
+  }
+  return { x, y };
+}
+
+function seriesForAeAt(data, pin, station, field){
+  // metric vs nozzle area ratio, using the exits of one case (station must be an exit)
+  const c = data.cases.find(c => c.pin === pin);
+  if(!c || !c.exits || !c.exits.length) return { x: [], y: [] };
+  const pts = [];
+  for(const e of c.exits){
+    if(e.aeAt == null || isNaN(e.aeAt)) continue;
+    const v = e.perf && field in e.perf ? e.perf[field] : e.props[field];
+    if(v !== undefined && v !== null && !isNaN(v)) pts.push({ x: e.aeAt, y: v });
+  }
+  pts.sort((a,b) => a.x - b.x);
+  return { x: pts.map(p => p.x), y: pts.map(p => p.y) };
+}
+
 function speciesForPin(data, pin, station){
-  const idx = station === "chamber" ? 0 : 1;
   const map = new Map();
   for(const c of data.cases){
     if(c.pin !== pin) continue;
     for(const sp in c.massfrac){
-      const v = c.massfrac[sp][idx];
+      const v = massfracVal(c, station, sp);
       if(v !== undefined && !isNaN(v)){
         map.set(sp, Math.max(map.get(sp) || 0, v));
       }
@@ -303,17 +368,39 @@ function bestPoint(data, pin, station, field){
   return { x: s.x[bi], y: s.y[bi] };
 }
 
+function xAxisTitle(){
+  const m = document.getElementById("xAxis").value;
+  if(m === "pin") return "Pressure (psia)";
+  if(m === "aeat") return "Area ratio Ae/At";
+  return "O/F ratio";
+}
+
 function plotLines(div, data, field, station, title, markBest){
-  const { pins } = getSorted(data);
+  const xMode = document.getElementById("xAxis").value;
+  const { pins, ofs } = getSorted(data);
   const yTitle = yTitleFor(field);
-  const layout = baseLayout(title, "O/F ratio", yTitle);
-  const traces = pins.map(pin => {
-    const s = seriesFor(data, pin, station, field);
-    const y = s.y.map(v => convValue(field, v));
-    return { x: s.x, y, mode: "lines+markers", name: pin + " psia", type: "scatter",
-             line: { width: 3 }, marker: { size: 5 } };
-  });
-  if(markBest){
+  const layout = baseLayout(title, xAxisTitle(), yTitle);
+  let traces;
+  if(xMode === "pin"){
+    traces = ofs.map(of => {
+      const s = seriesForOf(data, of, station, field);
+      return { x: s.x, y: s.y.map(v => convValue(field, v)), mode: "lines+markers",
+               name: "O/F " + of, type: "scatter", line: { width: 3 }, marker: { size: 5 } };
+    });
+  } else if(xMode === "aeat"){
+    traces = pins.map(pin => {
+      const s = seriesForAeAt(data, pin, station, field);
+      return { x: s.x, y: s.y.map(v => convValue(field, v)), mode: "lines+markers",
+               name: pin + " psia", type: "scatter", line: { width: 3 }, marker: { size: 5 } };
+    });
+  } else {
+    traces = pins.map(pin => {
+      const s = seriesFor(data, pin, station, field);
+      return { x: s.x, y: s.y.map(v => convValue(field, v)), mode: "lines+markers",
+               name: pin + " psia", type: "scatter", line: { width: 3 }, marker: { size: 5 } };
+    });
+  }
+  if(markBest && xMode === "of"){
     const bx = [], by = [], ann = [];
     pins.forEach(pin => {
       const p = bestPoint(data, pin, station, field);
@@ -336,23 +423,29 @@ function plotLines(div, data, field, station, title, markBest){
   Plotly.newPlot(div, traces, layout, { responsive: true, displayModeBar: false });
 }
 
+function stationName(station){
+  if(station === "chamber") return "Chamber";
+  if(station === "throat") return "Throat";
+  const i = exitIndex(station);
+  return "Exit " + (i + 1);
+}
+
 function plotMassFractions(div, data, pin, station){
-  const idx = station === "chamber" ? 0 : 1;
   const comp = data.meta.compType === "mole" ? "mole" : "mass";
   const ofs = [...new Set(data.cases.filter(c => c.pin === pin).map(c => c.of))].sort((a,b) => a-b);
   const species = speciesForPin(data, pin, station);
   const traces = species.map(sp => {
     const y = ofs.map(of => {
       const c = data.cases.find(c => c.pin === pin && c.of === of);
-      const v = c && c.massfrac[sp] ? c.massfrac[sp][idx] : 0;
-      return v * 100;
+      const v = c ? massfracVal(c, station, sp) : undefined;
+      return (v === undefined || isNaN(v) ? 0 : v) * 100;
     });
     return { x: ofs, y, mode: "lines", name: sp, type: "scatter",
              stackgroup: "one", line: { width: 0.5 },
              hovertemplate: sp + ": %{y:.2f}%" };
   });
   const layout = baseLayout(
-    (station === "chamber" ? "Chamber " : "Throat ") + comp + " fractions",
+    stationName(station) + " " + comp + " fractions",
     "O/F ratio", (comp === "mole" ? "Mole fraction (%)" : "Mass fraction (%)"));
   layout.yaxis.range = [0, 100];
   Plotly.newPlot(div, traces, layout, { responsive: true, displayModeBar: false });
@@ -425,13 +518,25 @@ function plotSurface(div, data, field, station){
 function transportVal(c, field, station, reaction){
   const t = c.transport;
   if(!t) return undefined;
-  const idx = station === "chamber" ? 0 : 1;
-  if(field === "VISC") return t.viscosity ? t.viscosity[idx] : undefined;
-  const r = t[reaction];
+  if(station === "chamber" || station === "throat"){
+    const idx = station === "chamber" ? 0 : 1;
+    if(field === "VISC") return t.viscosity ? t.viscosity[idx] : undefined;
+    const r = t[reaction];
+    if(!r) return undefined;
+    if(field === "COND") return r.cond ? r.cond[idx] : undefined;
+    if(field === "PRANDTL") return r.prandtl ? r.prandtl[idx] : undefined;
+    if(field === "TPCP") return r.cp ? r.cp[idx] : undefined;
+    return undefined;
+  }
+  const i = exitIndex(station);
+  const e = c.exits && c.exits[i];
+  if(!e || !e.transport) return undefined;
+  if(field === "VISC") return e.transport.viscosity;
+  const r = e.transport[reaction];
   if(!r) return undefined;
-  if(field === "COND") return r.cond ? r.cond[idx] : undefined;
-  if(field === "PRANDTL") return r.prandtl ? r.prandtl[idx] : undefined;
-  if(field === "TPCP") return r.cp ? r.cp[idx] : undefined;
+  if(field === "COND") return r.cond;
+  if(field === "PRANDTL") return r.prandtl;
+  if(field === "TPCP") return r.cp;
   return undefined;
 }
 
@@ -452,16 +557,53 @@ function plotTransport(div, data, field, station, title, yTitle){
   Plotly.newPlot(div, traces, baseLayout(title, "O/F ratio", yTitle), { responsive: true, displayModeBar: false });
 }
 
+function bestOfFor(data, station, field, dir){
+  const { pins } = getSorted(data);
+  const rows = [];
+  for(const pin of pins){
+    let best = null, bv = dir === "min" ? Infinity : -Infinity;
+    for(const c of data.cases){
+      if(c.pin !== pin) continue;
+      const v = getVal(c, station, field);
+      if(v === undefined || v === null || isNaN(v)) continue;
+      if(dir === "min" ? v < bv : v > bv){ bv = v; best = c; }
+    }
+    if(best) rows.push({ pin, of: best.of, val: bv });
+  }
+  return rows;
+}
+
 function renderCompare(){
   const el = document.getElementById("chCompare");
   const metric = document.getElementById("compareMetric").value;
-  const pin = parseFloat(document.getElementById("comparePressure").value);
+  const mode = document.getElementById("compareMode").value;
   const station = document.getElementById("station").value;
+
+  if(mode === "bestof"){
+    const traces = datasets.map(d => {
+      const rows = bestOfFor(d.data, station, metric, "max");
+      return { x: rows.map(r => r.pin), y: rows.map(r => r.of), mode: "lines+markers",
+               name: d.name, type: "scatter", line: { width: 3 }, marker: { size: 5 } };
+    });
+    Plotly.newPlot(el, traces, baseLayout("Best O/F vs pressure — " + (FIELD_NAMES[metric] || metric),
+      "Pressure (psia)", "Best O/F ratio"), { responsive: true, displayModeBar: false });
+    return;
+  }
+
+  const pin = parseFloat(document.getElementById("comparePressure").value);
   const traces = datasets.map(d => {
     const s = seriesFor(d.data, pin, station, metric);
-    const y = s.y.map(v => convValue(metric, v));
-    return { x: s.x, y, mode: "lines+markers", name: d.name, type: "scatter",
-             line: { width: 3 }, marker: { size: 5 } };
+    return { x: s.x, y: s.y.map(v => convValue(metric, v)), mode: "lines+markers",
+             name: d.name, type: "scatter", line: { width: 3 }, marker: { size: 5 } };
+  });
+  const bx = [], by = [];
+  datasets.forEach(d => {
+    const p = bestPoint(d.data, pin, station, metric);
+    if(p){ bx.push(p.x); by.push(convValue(metric, p.y)); }
+  });
+  traces.push({
+    x: bx, y: by, mode: "markers", type: "scatter", name: "Best O/F",
+    marker: { size: 12, symbol: "star", color: "#fbbf24", line: { width: 1, color: "#000000" } }
   });
   Plotly.newPlot(el, traces, baseLayout("Comparison — " + (FIELD_NAMES[metric] || metric),
     "O/F ratio", yTitleFor(metric)), { responsive: true, displayModeBar: false });
@@ -613,21 +755,14 @@ function exportCSV(){
   document.getElementById("status").textContent = "Exported CEA_data.csv (" + (rows.length - 1) + " rows).";
 }
 
-function bestVal(c, field){
-  if(field === "T") return c.chamber.T;
-  if(field === "MW") return c.chamber.MW;
-  if(field === "CSTAR" || field === "Isp") return c.perf[field];
-  return undefined;
-}
-
-function summaryRows(data, dir, field){
+function summaryRows(data, dir, field, station){
   const { pins } = getSorted(data);
   const rows = [];
   for(const pin of pins){
     let best = null, bv = dir === "min" ? Infinity : -Infinity;
     for(const c of data.cases){
       if(c.pin !== pin) continue;
-      const v = bestVal(c, field);
+      const v = getVal(c, station, field);
       if(v === undefined || v === null || isNaN(v)) continue;
       if(dir === "min" ? (v < bv) : (v > bv)){ bv = v; best = c; }
     }
@@ -636,21 +771,27 @@ function summaryRows(data, dir, field){
   return rows;
 }
 
+function fmtNum(v, digits){
+  if(v === undefined || v === null || isNaN(v)) return "-";
+  return Number(v).toFixed(digits);
+}
+
 function renderSummary(data){
   const [dir, field] = document.getElementById("bestMetric").value.split("|");
+  const station = document.getElementById("station").value;
   const uT = unitLabel("T"), uI = unitLabel("Isp"), uC = unitLabel("CSTAR");
   let html = "<table class='summary'><thead><tr>"
     + "<th>Pressure (psia)</th><th>Best O/F</th>"
-    + "<th>Isp (" + uI + ")</th><th>C* (" + uC + ")</th><th>Tc (" + uT + ")</th><th>MW (g/mol)</th>"
+    + "<th>Isp (" + uI + ")</th><th>C* (" + uC + ")</th><th>T (" + uT + ")</th><th>MW (g/mol)</th>"
     + "</tr></thead><tbody>";
-  for(const { pin, best } of summaryRows(data, dir, field)){
+  for(const { pin, best } of summaryRows(data, dir, field, station)){
     html += "<tr>"
       + "<td>" + pin + "</td>"
       + "<td>" + best.of.toFixed(2) + "</td>"
-      + "<td>" + convValue("Isp", best.perf.Isp).toFixed(1) + "</td>"
-      + "<td>" + (best.perf.CSTAR != null ? convValue("CSTAR", best.perf.CSTAR).toFixed(1) : "-") + "</td>"
-      + "<td>" + (best.chamber.T != null ? convValue("T", best.chamber.T).toFixed(1) : "-") + "</td>"
-      + "<td>" + (best.chamber.MW != null ? best.chamber.MW.toFixed(2) : "-") + "</td>"
+      + "<td>" + fmtNum(convValue("Isp", getVal(best, station, "Isp")), 1) + "</td>"
+      + "<td>" + fmtNum(convValue("CSTAR", getVal(best, station, "CSTAR")), 1) + "</td>"
+      + "<td>" + fmtNum(convValue("T", getVal(best, station, "T")), 1) + "</td>"
+      + "<td>" + fmtNum(getVal(best, station, "MW"), 2) + "</td>"
       + "</tr>";
   }
   html += "</tbody></table>";
@@ -661,21 +802,29 @@ function exportSummary(){
   if(!currentData) return;
   const data = currentData;
   const [dir, field] = document.getElementById("bestMetric").value.split("|");
+  const station = document.getElementById("station").value;
   const uT = unitLabel("T"), uI = unitLabel("Isp"), uC = unitLabel("CSTAR");
-  const header = ["Pressure(psia)", "Best O/F", "Isp(" + uI + ")", "CSTAR(" + uC + ")", "Tc(" + uT + ")", "MW(g/mol)"];
+  const header = ["Pressure(psia)", "Best O/F", "Isp(" + uI + ")", "CSTAR(" + uC + ")", "T(" + uT + ")", "MW(g/mol)"];
   const rows = [header];
-  for(const { pin, best } of summaryRows(data, dir, field)){
+  for(const { pin, best } of summaryRows(data, dir, field, station)){
     rows.push([
       pin, best.of,
-      convValue("Isp", best.perf.Isp),
-      best.perf.CSTAR != null ? convValue("CSTAR", best.perf.CSTAR) : "",
-      best.chamber.T != null ? convValue("T", best.chamber.T) : "",
-      best.chamber.MW != null ? best.chamber.MW : ""
+      convValue("Isp", getVal(best, station, "Isp")),
+      convValue("CSTAR", getVal(best, station, "CSTAR")),
+      convValue("T", getVal(best, station, "T")),
+      getVal(best, station, "MW")
     ]);
   }
   const csv = rows.map(r => r.map(csvCell).join(",")).join("\r\n");
   downloadText(csv, "CEA_summary.csv", "text/csv");
   document.getElementById("status").textContent = "Exported CEA_summary.csv.";
+}
+
+function exportJSON(){
+  if(!currentData) return;
+  const out = { meta: currentData.meta, cases: currentData.cases };
+  downloadText(JSON.stringify(out, null, 2), "CEA_data.json", "application/json");
+  document.getElementById("status").textContent = "Exported CEA_data.json (" + currentData.cases.length + " cases).";
 }
 
 /* ---------------- data table ---------------- */
@@ -701,8 +850,16 @@ function renderDataTable(data){
     { key: "GAMMA", label: "\u03b3",             get: c => c.chamber.GAMMA },
     { key: "CF",    label: "CF",                 get: c => c.perf.CF }
   ];
+  const filter = (document.getElementById("tableFilter").value || "").trim().toLowerCase();
+  let cases = data.cases;
+  if(filter){
+    cases = cases.filter(c => {
+      const hay = cols.map(col => fmtCell(col.get(c))) + " " + c.pin + " " + c.of;
+      return hay.toLowerCase().indexOf(filter) >= 0;
+    });
+  }
   const col = cols.find(x => x.key === tableSort.field) || cols[0];
-  const sorted = [...data.cases].sort((a, b) => {
+  const sorted = [...cases].sort((a, b) => {
     let va = col.get(a), vb = col.get(b);
     if(va === null || va === undefined || isNaN(va)) va = -Infinity;
     if(vb === null || vb === undefined || isNaN(vb)) vb = -Infinity;
@@ -744,25 +901,19 @@ function renderAll(){
     GAMMA: "Specific Heat Ratio"
   };
 
-  plotLines("chIsp", data, "Isp", station, "Specific Impulse vs O/F", true);
-  plotLines("chT", data, "T", station,
-    (station === "chamber" ? "Chamber" : "Throat") + " temperature vs O/F", true);
-  plotLines("chCstar", data, "CSTAR", station,
-    "Characteristic velocity C* vs O/F", true);
-  plotLines("chMW", data, "MW", station,
-    (station === "chamber" ? "Chamber" : "Throat") + " molecular weight vs O/F", false);
-  plotLines("chGamma", data, "GAMMA", station,
-    (station === "chamber" ? "Chamber" : "Throat") + " specific heat ratio vs O/F", false);
-  plotLines("chSonvel", data, "SONVEL", station,
-    (station === "chamber" ? "Chamber" : "Throat") + " sound velocity vs O/F", false);
-  plotLines("chCF", data, "CF", station,
-    "Thrust coefficient CF vs O/F", false);
-  plotLines("chIvac", data, "Ivac", station,
-    "Vacuum specific impulse vs O/F", true);
+  const sname = stationName(station);
+  plotLines("chIsp", data, "Isp", station, "Specific Impulse", true);
+  plotLines("chT", data, "T", station, sname + " temperature", true);
+  plotLines("chCstar", data, "CSTAR", station, "Characteristic velocity C*", true);
+  plotLines("chMW", data, "MW", station, sname + " molecular weight", false);
+  plotLines("chGamma", data, "GAMMA", station, sname + " specific heat ratio", false);
+  plotLines("chSonvel", data, "SONVEL", station, sname + " sound velocity", false);
+  plotLines("chCF", data, "CF", station, "Thrust coefficient CF", false);
+  plotLines("chIvac", data, "Ivac", station, "Vacuum specific impulse", true);
   plotIspTc("chIspTc", data);
   plotMassFractions("chMF", data, mfPin, station);
   plotHeatmap("chHeat", data, heatMetric, station,
-    (station === "chamber" ? "Chamber " : "Throat ") + heatTitles[heatMetric]);
+    stationName(station) + " " + heatTitles[heatMetric]);
   plotSurface("chSurface", data, heatMetric, station);
   if(data.meta.hasTransport){
     document.body.classList.add("hasTransport");
@@ -775,6 +926,28 @@ function renderAll(){
   renderCompare();
   renderSummary(data);
   renderDataTable(data);
+}
+
+function exitLabel(e, i){
+  let s = "Exit " + (i + 1);
+  const parts = [];
+  if(e.aeAt != null && !isNaN(e.aeAt)) parts.push("Ae/At=" + Number(e.aeAt).toFixed(2));
+  if(e.pinfP != null && !isNaN(e.pinfP)) parts.push("Pc/Pe=" + Number(e.pinfP).toFixed(2));
+  if(parts.length) s += " (" + parts.join(", ") + ")";
+  return s;
+}
+
+function populateStation(data){
+  const sel = document.getElementById("station");
+  const prev = sel.value;
+  const first = data.cases.find(c => c.exits && c.exits.length);
+  let html = '<option value="chamber">Chamber</option><option value="throat">Throat</option>';
+  if(first){
+    first.exits.forEach((e, i) => { html += '<option value="exit:' + i + '">' + exitLabel(e, i) + '</option>'; });
+  }
+  sel.innerHTML = html;
+  if(prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  else sel.value = "chamber";
 }
 
 function populateControls(data){
@@ -796,6 +969,7 @@ function populateControls(data){
     o.textContent = p + " psia";
     csel.appendChild(o);
   });
+  populateStation(data);
 }
 
 function renderMeta(data, name){
@@ -906,9 +1080,13 @@ function bindEvents(){
 
   document.getElementById("saveAllBtn").addEventListener("click", saveAll);
   document.getElementById("exportBtn").addEventListener("click", exportCSV);
+  document.getElementById("exportJsonBtn").addEventListener("click", exportJSON);
   document.getElementById("exportSummaryBtn").addEventListener("click", exportSummary);
   document.getElementById("exportDataBtn").addEventListener("click", exportCSV);
   document.getElementById("printBtn").addEventListener("click", () => window.print());
+  document.getElementById("tableFilter").addEventListener("input", () => {
+    if(currentData) renderDataTable(currentData);
+  });
   document.querySelectorAll(".saveBtn").forEach(btn => {
     btn.addEventListener("click", () => saveChart(btn.dataset.chart));
   });
@@ -928,7 +1106,7 @@ function bindEvents(){
     renderAll();
   });
 
-  ["station", "mfPressure", "heatMetric", "fontSize", "unitSystem", "bestMetric", "compareMetric", "comparePressure", "transportReaction"].forEach(id => {
+  ["station", "mfPressure", "heatMetric", "fontSize", "unitSystem", "bestMetric", "compareMetric", "comparePressure", "compareMode", "transportReaction", "xAxis"].forEach(id => {
     document.getElementById(id).addEventListener("change", renderAll);
   });
 
