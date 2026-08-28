@@ -49,8 +49,23 @@
   .datasets .chip .x{cursor:pointer;font-weight:700;opacity:.7}
   .datasets .chip .x:hover{opacity:1}
   .compareControls{display:flex;gap:8px;align-items:center}
+  #dataTableWrap{max-height:520px;overflow:auto}
+  table.datatable{border-collapse:collapse;width:100%;font-size:12px}
+  table.datatable th{position:sticky;top:0;background:var(--panel2);cursor:pointer;user-select:none;z-index:1}
+  table.datatable th,table.datatable td{border:1px solid var(--border);padding:4px 8px;text-align:right}
+  table.datatable td:first-child,table.datatable th:first-child{text-align:left}
+  table.datatable tbody tr:hover{background:var(--panel2)}
   #status{color:var(--muted);font-size:13px}
   #status.error{color:#f87171}
+  @media print{
+    body{background:#fff}
+    header,#dropzone,.meta,.datasets,.saveBtn,.controls button{display:none !important}
+    .grid{display:block;padding:0}
+    .card{break-inside:avoid;border:1px solid #ccc;margin:0 0 12px;background:#fff;box-shadow:none}
+    .chart{height:360px !important}
+    #dataTableWrap{max-height:none}
+    table.datatable th{position:static}
+  }
 </style>
 </head>
 <body>
@@ -85,6 +100,7 @@
       </select>
     </label>
     <button id="exportBtn">Export CSV</button>
+    <button id="printBtn">Print</button>
     <label>Mass fraction pressure
       <select id="mfPressure"></select>
     </label>
@@ -141,6 +157,7 @@
   <div class="card"><div class="card-head"><h2>Isp vs Chamber Temperature</h2><button class="saveBtn" data-chart="chIspTc" title="Save as image">Save</button></div><div class="chart" id="chIspTc"></div></div>
   <div class="card"><div class="card-head"><h2>Mass Fractions vs O/F</h2><button class="saveBtn" data-chart="chMF" title="Save as image">Save</button></div><div class="chart" id="chMF"></div></div>
   <div class="card full"><div class="card-head"><h2>Performance Map</h2><button class="saveBtn" data-chart="chHeat" title="Save as image">Save</button></div><div class="chart" id="chHeat"></div></div>
+  <div class="card full"><div class="card-head"><h2>3D Surface</h2><button class="saveBtn" data-chart="chSurface" title="Save as image">Save</button></div><div class="chart" id="chSurface"></div></div>
   <div class="card full">
     <div class="card-head">
       <h2>Compare datasets</h2>
@@ -157,6 +174,7 @@
     </div>
     <div class="chart" id="chCompare"></div>
   </div>
+  <div class="card full"><div class="card-head"><h2>Data table</h2><button class="saveBtn" id="exportDataBtn" title="Export as CSV">Export CSV</button></div><div id="dataTableWrap"><table class="datatable" id="dataTable"></table></div></div>
 </div>
 
 <script>
@@ -277,6 +295,7 @@ function bestPoint(data, pin, station, field){
 function plotLines(div, data, field, station, title, markBest){
   const { pins } = getSorted(data);
   const yTitle = yTitleFor(field);
+  const layout = baseLayout(title, "O/F ratio", yTitle);
   const traces = pins.map(pin => {
     const s = seriesFor(data, pin, station, field);
     const y = s.y.map(v => convValue(field, v));
@@ -284,18 +303,26 @@ function plotLines(div, data, field, station, title, markBest){
              line: { width: 3 }, marker: { size: 5 } };
   });
   if(markBest){
-    const bx = [], by = [];
+    const bx = [], by = [], ann = [];
     pins.forEach(pin => {
       const p = bestPoint(data, pin, station, field);
-      if(p){ bx.push(p.x); by.push(convValue(field, p.y)); }
+      if(p){
+        const py = convValue(field, p.y);
+        bx.push(p.x); by.push(py);
+        ann.push({
+          x: p.x, y: py, text: py.toFixed(1), showarrow: false,
+          font: { size: 9, color: "#b45309" }, xanchor: "left", xshift: 6, yshift: 4
+        });
+      }
     });
     traces.push({
       x: bx, y: by, mode: "markers", type: "scatter", name: "Best O/F",
       marker: { size: 13, symbol: "star", color: "#fbbf24", line: { width: 1, color: "#000000" } },
       hovertemplate: "O/F %{x:.3f}<br>" + yTitle + " %{y:.2f}<extra>Best O/F</extra>"
     });
+    layout.annotations = (layout.annotations || []).concat(ann);
   }
-  Plotly.newPlot(div, traces, baseLayout(title, "O/F ratio", yTitle), { responsive: true, displayModeBar: false });
+  Plotly.newPlot(div, traces, layout, { responsive: true, displayModeBar: false });
 }
 
 function plotMassFractions(div, data, pin, station){
@@ -357,6 +384,33 @@ function plotIspTc(div, data){
     { responsive: true, displayModeBar: false });
 }
 
+function plotSurface(div, data, field, station){
+  const { pins, ofs } = getSorted(data);
+  const z = pins.map(pin => ofs.map(of => {
+    const c = data.cases.find(c => c.pin === pin && c.of === of);
+    const v = c ? getVal(c, station, field) : null;
+    return v == null ? null : convValue(field, v);
+  }));
+  const fs = fontBase;
+  const c = THEME_COLORS[theme];
+  const layout = {
+    title: { text: (station === "chamber" ? "Chamber " : "Throat ") + (FIELD_NAMES[field] || field),
+      font: { size: fs + 1 } },
+    scene: {
+      xaxis: { title: "O/F", gridcolor: c.grid },
+      yaxis: { title: "Pressure (psia)", gridcolor: c.grid },
+      zaxis: { title: unitLabel(field) || field, gridcolor: c.grid }
+    },
+    paper_bgcolor: c.paper,
+    plot_bgcolor: c.plot,
+    font: { color: c.font },
+    margin: { l: 0, r: 0, t: 40, b: 0 }
+  };
+  Plotly.newPlot(div, [{ z, x: ofs, y: pins, type: "surface", colorscale: "Viridis",
+    colorbar: { title: { text: unitLabel(field) || field, side: "right" } } }],
+    layout, { responsive: true, displayModeBar: false });
+}
+
 function renderCompare(){
   const el = document.getElementById("chCompare");
   const metric = document.getElementById("compareMetric").value;
@@ -385,6 +439,7 @@ const CHART_DEFS = [
   { id: "chIspTc",  file: "Isp_vs_Tc" },
   { id: "chMF",     file: "MassFractions_vs_OF" },
   { id: "chHeat",   file: "Performance_Map" },
+  { id: "chSurface", file: "3D_Surface" },
   { id: "chCompare", file: "Compare" }
 ];
 
@@ -563,6 +618,49 @@ function exportSummary(){
   document.getElementById("status").textContent = "Exported CEA_summary.csv.";
 }
 
+/* ---------------- data table ---------------- */
+let tableSort = { field: "pin", dir: 1 };
+
+function fmtCell(v){
+  if(v === null || v === undefined || (typeof v === "number" && isNaN(v))) return "-";
+  if(typeof v === "number"){
+    if(Number.isInteger(v)) return String(v);
+    return Number(v.toFixed(3)).toString();
+  }
+  return String(v);
+}
+
+function renderDataTable(data){
+  const cols = [
+    { key: "pin",   label: "P (psia)",           get: c => c.pin },
+    { key: "of",    label: "O/F",                get: c => c.of },
+    { key: "Tc",    label: "Tc (" + unitLabel("T") + ")", get: c => convValue("T", c.chamber.T) },
+    { key: "Isp",   label: "Isp (" + unitLabel("Isp") + ")", get: c => convValue("Isp", c.perf.Isp) },
+    { key: "CSTAR", label: "C* (" + unitLabel("CSTAR") + ")", get: c => convValue("CSTAR", c.perf.CSTAR) },
+    { key: "MW",    label: "MW (g/mol)",         get: c => c.chamber.MW },
+    { key: "GAMMA", label: "\u03b3",             get: c => c.chamber.GAMMA },
+    { key: "CF",    label: "CF",                 get: c => c.perf.CF }
+  ];
+  const col = cols.find(x => x.key === tableSort.field) || cols[0];
+  const sorted = [...data.cases].sort((a, b) => {
+    let va = col.get(a), vb = col.get(b);
+    if(va === null || va === undefined || isNaN(va)) va = -Infinity;
+    if(vb === null || vb === undefined || isNaN(vb)) vb = -Infinity;
+    return (va < vb ? -1 : va > vb ? 1 : 0) * tableSort.dir;
+  });
+  let html = "<thead><tr>";
+  cols.forEach(c => {
+    const arrow = tableSort.field === c.key ? (tableSort.dir === 1 ? " \u25b2" : " \u25bc") : "";
+    html += "<th data-field=\"" + c.key + "\">" + c.label + arrow + "</th>";
+  });
+  html += "</tr></thead><tbody>";
+  for(const c of sorted){
+    html += "<tr>" + cols.map(col => "<td>" + fmtCell(col.get(c)) + "</td>").join("") + "</tr>";
+  }
+  html += "</tbody>";
+  document.getElementById("dataTable").innerHTML = html;
+}
+
 /* ---------------- render ---------------- */
 let currentData = null;
 let datasets = [];
@@ -605,8 +703,10 @@ function renderAll(){
   plotMassFractions("chMF", data, mfPin, station);
   plotHeatmap("chHeat", data, heatMetric, station,
     (station === "chamber" ? "Chamber " : "Throat ") + heatTitles[heatMetric]);
+  plotSurface("chSurface", data, heatMetric, station);
   renderCompare();
   renderSummary(data);
+  renderDataTable(data);
 }
 
 function populateControls(data){
@@ -738,8 +838,19 @@ function bindEvents(){
   document.getElementById("saveAllBtn").addEventListener("click", saveAll);
   document.getElementById("exportBtn").addEventListener("click", exportCSV);
   document.getElementById("exportSummaryBtn").addEventListener("click", exportSummary);
+  document.getElementById("exportDataBtn").addEventListener("click", exportCSV);
+  document.getElementById("printBtn").addEventListener("click", () => window.print());
   document.querySelectorAll(".saveBtn").forEach(btn => {
     btn.addEventListener("click", () => saveChart(btn.dataset.chart));
+  });
+
+  document.getElementById("dataTable").addEventListener("click", e => {
+    const th = e.target.closest("th");
+    if(!th || !th.dataset.field) return;
+    const f = th.dataset.field;
+    if(tableSort.field === f) tableSort.dir *= -1;
+    else { tableSort.field = f; tableSort.dir = 1; }
+    if(currentData) renderDataTable(currentData);
   });
 
   document.getElementById("themeSel").addEventListener("change", e => {
@@ -789,6 +900,29 @@ window.addEventListener("DOMContentLoaded", () => {
   bindEvents();
   loadDefault();
   window.addEventListener("resize", () => { if(currentData) renderAll(); });
+
+  let prevPrintTheme = null;
+  window.addEventListener("beforeprint", () => {
+    prevPrintTheme = theme;
+    if(theme !== "light"){
+      theme = "light";
+      document.body.classList.add("light");
+      renderAll();
+    }
+    CHART_DEFS.forEach(d => {
+      const gd = document.getElementById(d.id);
+      if(gd && gd.data) Plotly.Plots.resize(gd);
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    if(prevPrintTheme && prevPrintTheme !== "light"){
+      theme = prevPrintTheme;
+      document.body.classList.remove("light");
+      renderAll();
+    }
+    prevPrintTheme = null;
+    if(currentData) renderAll();
+  });
 });
 </script>
 </body>
