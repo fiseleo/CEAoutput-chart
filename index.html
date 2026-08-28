@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CEA Output Chart Viewer</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="ceaparse.js"></script>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#293548; --text:#e2e8f0;
+    --muted:#94a3b8; --accent:#38bdf8; --border:#334155;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:12px;align-items:center;position:sticky;top:0;background:var(--bg);z-index:10}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-left:auto}
+  label{font-size:12px;color:var(--muted);display:inline-flex;flex-direction:column;gap:3px}
+  select,button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px}
+  select:hover,button:hover{background:var(--panel2);cursor:pointer}
+  button.primary{background:var(--accent);color:#04121f;border-color:var(--accent);font-weight:600}
+  #fileInput{font-size:12px;color:var(--muted);max-width:220px}
+  #dropzone{border:2px dashed var(--border);border-radius:12px;padding:36px;text-align:center;color:var(--muted);margin:20px;display:block}
+  #dropzone.drag{background:var(--panel);border-color:var(--accent)}
+  .meta{color:var(--muted);font-size:13px;padding:12px 20px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px;padding:16px 20px 40px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .card h2{font-size:14px;margin:0 0 6px;font-weight:600;color:var(--muted)}
+  .card .chart{width:100%;height:380px}
+  #status{color:var(--muted);font-size:13px}
+  #status.error{color:#f87171}
+</style>
+</head>
+<body>
+<header>
+  <h1>CEA Rocket Performance Charts</h1>
+  <div class="controls">
+    <label>Station
+      <select id="station">
+        <option value="chamber" selected>Chamber</option>
+        <option value="throat">Throat</option>
+      </select>
+    </label>
+    <label>Mass fraction pressure
+      <select id="mfPressure"></select>
+    </label>
+    <label>Heatmap metric
+      <select id="heatMetric">
+        <option value="Isp">Specific Impulse</option>
+        <option value="T" selected>Temperature</option>
+        <option value="CSTAR">C*</option>
+        <option value="MW">Molecular Weight</option>
+        <option value="GAMMA">Gamma</option>
+      </select>
+    </label>
+    <input type="file" id="fileInput" accept=".txt,text/plain">
+    <button id="reloadBtn" class="primary">Reload output.txt</button>
+    <span id="status"></span>
+  </div>
+</header>
+<div id="dropzone">Drop a CEA output .txt file here</div>
+<div class="meta" id="meta"></div>
+<div class="grid" id="charts">
+  <div class="card"><h2>Specific Impulse vs O/F</h2><div class="chart" id="chIsp"></div></div>
+  <div class="card"><h2>Temperature vs O/F</h2><div class="chart" id="chT"></div></div>
+  <div class="card"><h2>Characteristic Velocity C* vs O/F</h2><div class="chart" id="chCstar"></div></div>
+  <div class="card"><h2>Molecular Weight vs O/F</h2><div class="chart" id="chMW"></div></div>
+  <div class="card"><h2>Mass Fractions vs O/F</h2><div class="chart" id="chMF"></div></div>
+  <div class="card full"><h2>Performance Map</h2><div class="chart" id="chHeat"></div></div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------------- helpers ---------------- */
+function getSorted(data){
+  const pins = [...new Set(data.cases.map(c => c.pin))].sort((a,b) => a-b);
+  const ofs = [...new Set(data.cases.map(c => c.of))].sort((a,b) => a-b);
+  return { pins, ofs };
+}
+
+function getVal(c, station, field){
+  if(field in c.perf) return c.perf[field];
+  return station === "chamber" ? c.chamber[field] : c.throat[field];
+}
+
+function seriesFor(data, pin, station, field){
+  const ofs = [...new Set(data.cases.filter(c => c.pin === pin).map(c => c.of))].sort((a,b) => a-b);
+  const x = [], y = [];
+  for(const of of ofs){
+    const c = data.cases.find(c => c.pin === pin && c.of === of);
+    const v = c ? getVal(c, station, field) : undefined;
+    if(v !== undefined && v !== null && !isNaN(v)){ x.push(of); y.push(v); }
+  }
+  return { x, y };
+}
+
+function speciesForPin(data, pin, station){
+  const idx = station === "chamber" ? 0 : 1;
+  const map = new Map();
+  for(const c of data.cases){
+    if(c.pin !== pin) continue;
+    for(const sp in c.massfrac){
+      const v = c.massfrac[sp][idx];
+      if(v !== undefined && !isNaN(v)){
+        map.set(sp, Math.max(map.get(sp) || 0, v));
+      }
+    }
+  }
+  return [...map.entries()]
+    .sort((a,b) => b[1] - a[1])
+    .filter(([,v]) => v >= 1e-4)
+    .map(([sp]) => sp)
+    .slice(0, 14);
+}
+
+/* ---------------- layout & plot ---------------- */
+function baseLayout(title, xtitle, ytitle){
+  return {
+    title: { text: title, font: { size: 13 } },
+    xaxis: { title: xtitle, gridcolor: "#334155" },
+    yaxis: { title: ytitle, gridcolor: "#334155" },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { color: "#e2e8f0" },
+    margin: { l: 62, r: 20, t: 32, b: 52 },
+    legend: { font: { size: 11 } },
+    hovermode: "closest"
+  };
+}
+
+function plotLines(div, data, field, station, yTitle, title){
+  const { pins } = getSorted(data);
+  const traces = pins.map(pin => {
+    const s = seriesFor(data, pin, station, field);
+    return { x: s.x, y: s.y, mode: "lines+markers", name: pin + " psia", type: "scatter",
+             line: { width: 2 }, marker: { size: 4 } };
+  });
+  Plotly.newPlot(div, traces, baseLayout(title, "O/F ratio", yTitle), { responsive: true, displayModeBar: false });
+}
+
+function plotMassFractions(div, data, pin, station){
+  const idx = station === "chamber" ? 0 : 1;
+  const ofs = [...new Set(data.cases.filter(c => c.pin === pin).map(c => c.of))].sort((a,b) => a-b);
+  const species = speciesForPin(data, pin, station);
+  const traces = species.map(sp => {
+    const x = [], y = [];
+    for(const of of ofs){
+      const c = data.cases.find(c => c.pin === pin && c.of === of);
+      const v = c && c.massfrac[sp] ? c.massfrac[sp][idx] : undefined;
+      if(v !== undefined && !isNaN(v)){ x.push(of); y.push(v); }
+    }
+    return { x, y, mode: "lines", name: sp, type: "scatter", line: { width: 2 } };
+  });
+  Plotly.newPlot(div, traces, baseLayout(
+    station === "chamber" ? "Chamber mass fractions" : "Throat mass fractions",
+    "O/F ratio", "Mass fraction"
+  ), { responsive: true, displayModeBar: false });
+}
+
+function plotHeatmap(div, data, field, station, title){
+  const { pins, ofs } = getSorted(data);
+  const z = pins.map(pin => ofs.map(of => {
+    const c = data.cases.find(c => c.pin === pin && c.of === of);
+    return c ? getVal(c, station, field) : null;
+  }));
+  const trace = { z, x: ofs, y: pins, type: "heatmap", colorscale: "Viridis",
+    colorbar: { title: { text: field, side: "right" } } };
+  Plotly.newPlot(div, [trace], baseLayout(title, "O/F ratio", "Pressure (psia)"),
+    { responsive: true, displayModeBar: false });
+}
+
+/* ---------------- render ---------------- */
+let currentData = null;
+
+function renderAll(){
+  if(!currentData) return;
+  const data = currentData;
+  const station = document.getElementById("station").value;
+  const mfPin = parseFloat(document.getElementById("mfPressure").value);
+  const heatMetric = document.getElementById("heatMetric").value;
+
+  const heatTitles = { Isp: "Specific Impulse (m/s)", T: "Temperature (K)",
+    CSTAR: "Characteristic Velocity C* (m/s)", MW: "Molecular Weight (g/mol)", GAMMA: "Specific Heat Ratio" };
+
+  plotLines("chIsp", data, "Isp", station, "Isp (m/s)",
+    "Specific Impulse vs O/F");
+  plotLines("chT", data, "T", station, "Temperature (K)",
+    (station === "chamber" ? "Chamber" : "Throat") + " temperature vs O/F");
+  plotLines("chCstar", data, "CSTAR", station, "C* (m/s)",
+    "Characteristic velocity C* vs O/F");
+  plotLines("chMW", data, "MW", station, "Molecular weight (g/mol)",
+    (station === "chamber" ? "Chamber" : "Throat") + " molecular weight vs O/F");
+  plotMassFractions("chMF", data, mfPin, station);
+  plotHeatmap("chHeat", data, heatMetric, station,
+    (station === "chamber" ? "Chamber " : "Throat ") + heatTitles[heatMetric]);
+}
+
+function populateControls(data){
+  const { pins } = getSorted(data);
+  const sel = document.getElementById("mfPressure");
+  sel.innerHTML = "";
+  pins.forEach(p => {
+    const o = document.createElement("option");
+    o.value = p;
+    o.textContent = p + " psia";
+    sel.appendChild(o);
+  });
+}
+
+function renderMeta(data, name){
+  const m = data.meta;
+  const parts = [];
+  if(m.problemType) parts.push(m.problemType);
+  if(m.fuels.length) parts.push("Fuel: " + [...new Set(m.fuels)].join(", "));
+  if(m.oxidizers.length) parts.push("Oxidizer: " + [...new Set(m.oxidizers)].join(", "));
+  parts.push(data.cases.length + " cases (" + getSorted(data).pins.length + " pressures x " + getSorted(data).ofs.length + " O/F)");
+  document.getElementById("meta").textContent = name + "  —  " + parts.join("  ·  ");
+}
+
+function parseAndRender(text, name){
+  const status = document.getElementById("status");
+  try{
+    const data = parseCEA(text);
+    if(!data.cases.length){
+      status.textContent = "No CEA output data found in this file.";
+      status.className = "error";
+      return;
+    }
+    currentData = data;
+    populateControls(data);
+    renderMeta(data, name);
+    renderAll();
+    status.textContent = "Loaded " + data.cases.length + " cases.";
+    status.className = "";
+    document.getElementById("dropzone").style.display = "none";
+  }catch(err){
+    status.textContent = "Error parsing file: " + err.message;
+    status.className = "error";
+    console.error(err);
+  }
+}
+
+/* ---------------- file loading ---------------- */
+async function loadDefault(){
+  try{
+    const r = await fetch("output.txt", { cache: "no-store" });
+    if(r.ok){
+      const t = await r.text();
+      parseAndRender(t, "output.txt");
+    }
+  }catch(e){ /* no default file */ }
+}
+
+function bindEvents(){
+  const readFile = f => {
+    if(!f) return;
+    const rd = new FileReader();
+    rd.onload = () => parseAndRender(rd.result, f.name);
+    rd.readAsText(f);
+  };
+
+  document.getElementById("fileInput").addEventListener("change", e => {
+    readFile(e.target.files[0]);
+  });
+
+  document.getElementById("reloadBtn").addEventListener("click", loadDefault);
+
+  ["station", "mfPressure", "heatMetric"].forEach(id => {
+    document.getElementById(id).addEventListener("change", renderAll);
+  });
+
+  const dz = document.getElementById("dropzone");
+  ["dragenter", "dragover"].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.classList.add("drag");
+  }));
+  ["dragleave", "drop"].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.classList.remove("drag");
+  }));
+
+  // allow dropping anywhere on the page
+  window.addEventListener("dragover", e => e.preventDefault());
+  window.addEventListener("drop", e => { e.preventDefault(); readFile(e.dataTransfer.files[0]); });
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  bindEvents();
+  loadDefault();
+  window.addEventListener("resize", () => { if(currentData) renderAll(); });
+});
+</script>
+</body>
+</html>
