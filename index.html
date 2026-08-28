@@ -11,6 +11,11 @@
     --bg:#0f172a; --panel:#1e293b; --panel2:#293548; --text:#e2e8f0;
     --muted:#94a3b8; --accent:#38bdf8; --border:#334155;
   }
+  body.light{
+    --bg:#ffffff; --panel:#f8fafc; --panel2:#e2e8f0; --text:#0f172a;
+    --muted:#475569; --accent:#0284c7; --border:#cbd5e1;
+  }
+  body.light button.primary{color:#ffffff}
   *{box-sizing:border-box}
   body{margin:0;font-family:system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
   header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:12px;align-items:center;position:sticky;top:0;background:var(--bg);z-index:10}
@@ -37,6 +42,13 @@
   table.summary th,table.summary td{border:1px solid var(--border);padding:6px 10px;text-align:right}
   table.summary th{background:var(--panel2);color:var(--text);font-weight:600}
   table.summary td:first-child,table.summary th:first-child{text-align:left}
+  .inlineSel{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:13px}
+  .datasets{display:flex;flex-wrap:wrap;gap:6px;padding:0 20px}
+  .datasets .chip{background:var(--panel2);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12px;display:inline-flex;align-items:center;gap:7px;cursor:pointer}
+  .datasets .chip.active{border-color:var(--accent);color:var(--accent)}
+  .datasets .chip .x{cursor:pointer;font-weight:700;opacity:.7}
+  .datasets .chip .x:hover{opacity:1}
+  .compareControls{display:flex;gap:8px;align-items:center}
   #status{color:var(--muted);font-size:13px}
   #status.error{color:#f87171}
 </style>
@@ -64,6 +76,12 @@
       <select id="unitSystem">
         <option value="si" selected>SI</option>
         <option value="imperial">Imperial</option>
+      </select>
+    </label>
+    <label>Theme
+      <select id="themeSel">
+        <option value="dark" selected>Dark</option>
+        <option value="light">Light</option>
       </select>
     </label>
     <button id="exportBtn">Export CSV</button>
@@ -95,14 +113,45 @@
 </header>
 <div id="dropzone">Drop a CEA output .txt file here</div>
 <div class="meta" id="meta"></div>
+<div class="datasets" id="datasetList"></div>
 <div class="grid" id="charts">
-  <div class="card full"><div class="card-head"><h2>Summary — best O/F (max Isp)</h2></div><div id="summaryTable"></div></div>
+  <div class="card full"><div class="card-head">
+    <h2>Summary — best O/F by
+      <select id="bestMetric" class="inlineSel">
+        <option value="Isp" selected>max Isp</option>
+        <option value="CSTAR">max C*</option>
+        <option value="T">max Tc</option>
+      </select>
+    </h2>
+    <button class="saveBtn" id="exportSummaryBtn" title="Export summary as CSV">Export CSV</button>
+  </div><div id="summaryTable"></div></div>
   <div class="card"><div class="card-head"><h2>Specific Impulse vs O/F</h2><button class="saveBtn" data-chart="chIsp" title="Save as image">Save</button></div><div class="chart" id="chIsp"></div></div>
   <div class="card"><div class="card-head"><h2>Temperature vs O/F</h2><button class="saveBtn" data-chart="chT" title="Save as image">Save</button></div><div class="chart" id="chT"></div></div>
   <div class="card"><div class="card-head"><h2>Characteristic Velocity C* vs O/F</h2><button class="saveBtn" data-chart="chCstar" title="Save as image">Save</button></div><div class="chart" id="chCstar"></div></div>
   <div class="card"><div class="card-head"><h2>Molecular Weight vs O/F</h2><button class="saveBtn" data-chart="chMW" title="Save as image">Save</button></div><div class="chart" id="chMW"></div></div>
+  <div class="card"><div class="card-head"><h2>Specific Heat Ratio γ vs O/F</h2><button class="saveBtn" data-chart="chGamma" title="Save as image">Save</button></div><div class="chart" id="chGamma"></div></div>
+  <div class="card"><div class="card-head"><h2>Sound Velocity vs O/F</h2><button class="saveBtn" data-chart="chSonvel" title="Save as image">Save</button></div><div class="chart" id="chSonvel"></div></div>
+  <div class="card"><div class="card-head"><h2>Thrust Coefficient CF vs O/F</h2><button class="saveBtn" data-chart="chCF" title="Save as image">Save</button></div><div class="chart" id="chCF"></div></div>
+  <div class="card"><div class="card-head"><h2>Vacuum Isp vs O/F</h2><button class="saveBtn" data-chart="chIvac" title="Save as image">Save</button></div><div class="chart" id="chIvac"></div></div>
+  <div class="card"><div class="card-head"><h2>Isp vs Chamber Temperature</h2><button class="saveBtn" data-chart="chIspTc" title="Save as image">Save</button></div><div class="chart" id="chIspTc"></div></div>
   <div class="card"><div class="card-head"><h2>Mass Fractions vs O/F</h2><button class="saveBtn" data-chart="chMF" title="Save as image">Save</button></div><div class="chart" id="chMF"></div></div>
   <div class="card full"><div class="card-head"><h2>Performance Map</h2><button class="saveBtn" data-chart="chHeat" title="Save as image">Save</button></div><div class="chart" id="chHeat"></div></div>
+  <div class="card full">
+    <div class="card-head">
+      <h2>Compare datasets</h2>
+      <div class="compareControls">
+        <select id="compareMetric">
+          <option value="Isp" selected>Isp</option>
+          <option value="CSTAR">C*</option>
+          <option value="T">Tc</option>
+          <option value="GAMMA">Gamma</option>
+          <option value="MW">MW</option>
+        </select>
+        <select id="comparePressure"></select>
+      </div>
+    </div>
+    <div class="chart" id="chCompare"></div>
+  </div>
 </div>
 
 <script>
@@ -176,7 +225,8 @@ function unitLabel(field){
 
 const FIELD_NAMES = {
   Isp: "Isp", Ivac: "Ivac", T: "Temperature", P: "Pressure",
-  CSTAR: "C*", MW: "Molecular weight", GAMMA: "Specific heat ratio", SONVEL: "Sound velocity"
+  CSTAR: "C*", MW: "Molecular weight", GAMMA: "Specific heat ratio",
+  SONVEL: "Sound velocity", CF: "Thrust coefficient"
 };
 
 function yTitleFor(field){
@@ -185,15 +235,22 @@ function yTitleFor(field){
 }
 
 /* ---------------- layout & plot ---------------- */
+const THEME_COLORS = {
+  dark:  { paper: "rgba(0,0,0,0)", plot: "rgba(0,0,0,0)", font: "#e2e8f0", grid: "#475569" },
+  light: { paper: "#ffffff", plot: "#ffffff", font: "#0f172a", grid: "#cbd5e1" }
+};
+let theme = "dark";
+
 function baseLayout(title, xtitle, ytitle){
   const fs = fontBase;
+  const c = THEME_COLORS[theme];
   return {
     title: { text: title, font: { size: fs + 1 } },
-    xaxis: { title: xtitle, gridcolor: "#475569", titlefont: { size: fs }, tickfont: { size: fs - 2 } },
-    yaxis: { title: ytitle, gridcolor: "#475569", titlefont: { size: fs }, tickfont: { size: fs - 2 } },
-    paper_bgcolor: "rgba(0,0,0,0)",
-    plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: "#e2e8f0" },
+    xaxis: { title: xtitle, gridcolor: c.grid, titlefont: { size: fs }, tickfont: { size: fs - 2 } },
+    yaxis: { title: ytitle, gridcolor: c.grid, titlefont: { size: fs }, tickfont: { size: fs - 2 } },
+    paper_bgcolor: c.paper,
+    plot_bgcolor: c.plot,
+    font: { color: c.font },
     margin: { l: 62, r: 20, t: 32, b: 52 },
     legend: { font: { size: fs - 2 } },
     hovermode: "closest",
@@ -271,25 +328,59 @@ function plotHeatmap(div, data, field, station, title){
     { responsive: true, displayModeBar: false });
 }
 
+function plotIspTc(div, data){
+  const { pins } = getSorted(data);
+  const xTitle = "Chamber temperature (" + unitLabel("T") + ")";
+  const yTitle = "Isp (" + unitLabel("Isp") + ")";
+  const traces = pins.map(pin => {
+    const ofs = [...new Set(data.cases.filter(c => c.pin === pin).map(c => c.of))].sort((a,b) => a-b);
+    const x = [], y = [];
+    for(const of of ofs){
+      const c = data.cases.find(c => c.pin === pin && c.of === of);
+      if(c && c.chamber.T != null && c.perf.Isp != null){
+        x.push(convValue("T", c.chamber.T));
+        y.push(convValue("Isp", c.perf.Isp));
+      }
+    }
+    return { x, y, mode: "lines+markers", name: pin + " psia", type: "scatter",
+             line: { width: 3 }, marker: { size: 5 } };
+  });
+  Plotly.newPlot(div, traces, baseLayout("Isp vs chamber temperature", xTitle, yTitle),
+    { responsive: true, displayModeBar: false });
+}
+
+function renderCompare(){
+  const el = document.getElementById("chCompare");
+  const metric = document.getElementById("compareMetric").value;
+  const pin = parseFloat(document.getElementById("comparePressure").value);
+  const station = document.getElementById("station").value;
+  const traces = datasets.map(d => {
+    const s = seriesFor(d.data, pin, station, metric);
+    const y = s.y.map(v => convValue(metric, v));
+    return { x: s.x, y, mode: "lines+markers", name: d.name, type: "scatter",
+             line: { width: 3 }, marker: { size: 5 } };
+  });
+  Plotly.newPlot(el, traces, baseLayout("Comparison — " + (FIELD_NAMES[metric] || metric),
+    "O/F ratio", yTitleFor(metric)), { responsive: true, displayModeBar: false });
+}
+
 /* ---------------- save / export ---------------- */
 const CHART_DEFS = [
-  { id: "chIsp",   file: "Isp_vs_OF" },
-  { id: "chT",     file: "Temperature_vs_OF" },
-  { id: "chCstar", file: "Cstar_vs_OF" },
-  { id: "chMW",    file: "MW_vs_OF" },
-  { id: "chMF",    file: "MassFractions_vs_OF" },
-  { id: "chHeat",  file: "Performance_Map" }
+  { id: "chIsp",    file: "Isp_vs_OF" },
+  { id: "chT",      file: "Temperature_vs_OF" },
+  { id: "chCstar",  file: "Cstar_vs_OF" },
+  { id: "chMW",     file: "MW_vs_OF" },
+  { id: "chGamma",  file: "Gamma_vs_OF" },
+  { id: "chSonvel", file: "SoundVelocity_vs_OF" },
+  { id: "chCF",     file: "CF_vs_OF" },
+  { id: "chIvac",   file: "Ivac_vs_OF" },
+  { id: "chIspTc",  file: "Isp_vs_Tc" },
+  { id: "chMF",     file: "MassFractions_vs_OF" },
+  { id: "chHeat",   file: "Performance_Map" },
+  { id: "chCompare", file: "Compare" }
 ];
 
-const DARK_THEME = {
-  paper_bgcolor: "rgba(0,0,0,0)",
-  plot_bgcolor: "rgba(0,0,0,0)",
-  font: { color: "#e2e8f0" },
-  "xaxis.gridcolor": "#475569",
-  "yaxis.gridcolor": "#475569"
-};
-
-const LIGHT_THEME = {
+const EXPORT_THEME = {
   paper_bgcolor: "#ffffff",
   plot_bgcolor: "#ffffff",
   font: { color: "#000000" },
@@ -297,13 +388,19 @@ const LIGHT_THEME = {
   "yaxis.gridcolor": "#cccccc"
 };
 
+function screenThemeLayout(){
+  const c = THEME_COLORS[theme];
+  return { paper_bgcolor: c.paper, plot_bgcolor: c.plot, font: { color: c.font },
+    "xaxis.gridcolor": c.grid, "yaxis.gridcolor": c.grid };
+}
+
 async function saveChart(id){
   const gd = document.getElementById(id);
   if(!gd || !gd.data) return;
   const fmt = document.getElementById("saveFormat").value;
   const def = CHART_DEFS.find(d => d.id === id);
   try{
-    await Plotly.relayout(gd, LIGHT_THEME);
+    await Plotly.relayout(gd, EXPORT_THEME);
     await Plotly.downloadImage(gd, {
       format: fmt,
       filename: "CEA_" + (def ? def.file : id),
@@ -314,7 +411,7 @@ async function saveChart(id){
   }catch(err){
     console.error("Save failed:", err);
   }finally{
-    await Plotly.relayout(gd, DARK_THEME);
+    await Plotly.relayout(gd, screenThemeLayout());
   }
 }
 
@@ -370,7 +467,7 @@ function exportCSV(){
     "MWc(g/mol)", "MWt(g/mol)", "Gamma_c", "Gamma_t",
     "CSTAR(" + unitLabel("CSTAR") + ")", "CF",
     "Ivac(" + unitLabel("Ivac") + ")", "Isp(" + unitLabel("Isp") + ")"
-  ].concat(species.map(s => "mf_" + s));
+  ].concat(species.map(s => "c_" + s), species.map(s => "t_" + s));
 
   const rows = [header];
   const sorted = [...data.cases].sort((a,b) => (a.pin - b.pin) || (a.of - b.of));
@@ -385,6 +482,7 @@ function exportCSV(){
       convValue("Ivac", c.perf.Ivac), convValue("Isp", c.perf.Isp)
     ];
     species.forEach(s => row.push(c.massfrac[s] ? c.massfrac[s][0] : ""));
+    species.forEach(s => row.push(c.massfrac[s] ? c.massfrac[s][1] : ""));
     rows.push(row);
   }
   const csv = rows.map(r => r.map(csvCell).join(",")).join("\r\n");
@@ -392,19 +490,35 @@ function exportCSV(){
   document.getElementById("status").textContent = "Exported CEA_data.csv (" + (rows.length - 1) + " rows).";
 }
 
-function renderSummary(data){
+function bestVal(c, field){
+  if(field === "T") return c.chamber.T;
+  if(field === "CSTAR" || field === "Isp") return c.perf[field];
+  return undefined;
+}
+
+function summaryRows(data, metric){
   const { pins } = getSorted(data);
+  const rows = [];
+  for(const pin of pins){
+    let best = null, bv = -Infinity;
+    for(const c of data.cases){
+      if(c.pin !== pin) continue;
+      const v = bestVal(c, metric);
+      if(v !== undefined && v !== null && !isNaN(v) && v > bv){ bv = v; best = c; }
+    }
+    if(best) rows.push({ pin, best });
+  }
+  return rows;
+}
+
+function renderSummary(data){
+  const metric = document.getElementById("bestMetric").value;
   const uT = unitLabel("T"), uI = unitLabel("Isp"), uC = unitLabel("CSTAR");
   let html = "<table class='summary'><thead><tr>"
     + "<th>Pressure (psia)</th><th>Best O/F</th>"
     + "<th>Isp (" + uI + ")</th><th>C* (" + uC + ")</th><th>Tc (" + uT + ")</th>"
     + "</tr></thead><tbody>";
-  for(const pin of pins){
-    let best = null;
-    for(const c of data.cases){
-      if(c.pin === pin && c.perf.Isp !== undefined && (!best || c.perf.Isp > best.perf.Isp)) best = c;
-    }
-    if(!best) continue;
+  for(const { pin, best } of summaryRows(data, metric)){
     html += "<tr>"
       + "<td>" + pin + "</td>"
       + "<td>" + best.of.toFixed(2) + "</td>"
@@ -417,8 +531,29 @@ function renderSummary(data){
   document.getElementById("summaryTable").innerHTML = html;
 }
 
+function exportSummary(){
+  if(!currentData) return;
+  const data = currentData;
+  const metric = document.getElementById("bestMetric").value;
+  const uT = unitLabel("T"), uI = unitLabel("Isp"), uC = unitLabel("CSTAR");
+  const header = ["Pressure(psia)", "Best O/F", "Isp(" + uI + ")", "CSTAR(" + uC + ")", "Tc(" + uT + ")"];
+  const rows = [header];
+  for(const { pin, best } of summaryRows(data, metric)){
+    rows.push([
+      pin, best.of,
+      convValue("Isp", best.perf.Isp),
+      best.perf.CSTAR != null ? convValue("CSTAR", best.perf.CSTAR) : "",
+      best.chamber.T != null ? convValue("T", best.chamber.T) : ""
+    ]);
+  }
+  const csv = rows.map(r => r.map(csvCell).join(",")).join("\r\n");
+  downloadText(csv, "CEA_summary.csv", "text/csv");
+  document.getElementById("status").textContent = "Exported CEA_summary.csv.";
+}
+
 /* ---------------- render ---------------- */
 let currentData = null;
+let datasets = [];
 let fontBase = 14;
 let unitSystem = "si";
 
@@ -446,9 +581,19 @@ function renderAll(){
     "Characteristic velocity C* vs O/F", true);
   plotLines("chMW", data, "MW", station,
     (station === "chamber" ? "Chamber" : "Throat") + " molecular weight vs O/F", false);
+  plotLines("chGamma", data, "GAMMA", station,
+    (station === "chamber" ? "Chamber" : "Throat") + " specific heat ratio vs O/F", false);
+  plotLines("chSonvel", data, "SONVEL", station,
+    (station === "chamber" ? "Chamber" : "Throat") + " sound velocity vs O/F", false);
+  plotLines("chCF", data, "CF", station,
+    "Thrust coefficient CF vs O/F", false);
+  plotLines("chIvac", data, "Ivac", station,
+    "Vacuum specific impulse vs O/F", true);
+  plotIspTc("chIspTc", data);
   plotMassFractions("chMF", data, mfPin, station);
   plotHeatmap("chHeat", data, heatMetric, station,
     (station === "chamber" ? "Chamber " : "Throat ") + heatTitles[heatMetric]);
+  renderCompare();
   renderSummary(data);
 }
 
@@ -461,6 +606,15 @@ function populateControls(data){
     o.value = p;
     o.textContent = p + " psia";
     sel.appendChild(o);
+  });
+  const allPins = [...new Set(datasets.flatMap(d => getSorted(d.data).pins))].sort((a,b) => a-b);
+  const csel = document.getElementById("comparePressure");
+  csel.innerHTML = "";
+  allPins.forEach(p => {
+    const o = document.createElement("option");
+    o.value = p;
+    o.textContent = p + " psia";
+    csel.appendChild(o);
   });
 }
 
@@ -476,6 +630,54 @@ function renderMeta(data, name){
   document.getElementById("meta").textContent = name + "  —  " + parts.join("  ·  ");
 }
 
+function addDataset(name, data){
+  const idx = datasets.findIndex(d => d.name === name);
+  if(idx >= 0) datasets[idx].data = data;
+  else datasets.push({ name, data });
+  currentData = data;
+  populateControls(data);
+  renderMeta(data, name);
+  renderDatasetList();
+  renderAll();
+}
+
+function removeDataset(name){
+  const idx = datasets.findIndex(d => d.name === name);
+  if(idx < 0) return;
+  datasets.splice(idx, 1);
+  if(!datasets.length){
+    currentData = null;
+    renderDatasetList();
+    document.getElementById("meta").textContent = "";
+    return;
+  }
+  const d = datasets[datasets.length - 1];
+  currentData = d.data;
+  populateControls(d.data);
+  renderMeta(d.data, d.name);
+  renderDatasetList();
+  renderAll();
+}
+
+function renderDatasetList(){
+  const el = document.getElementById("datasetList");
+  el.innerHTML = "";
+  datasets.forEach(d => {
+    const chip = document.createElement("span");
+    chip.className = "chip" + (d.data === currentData ? " active" : "");
+    chip.dataset.name = d.name;
+    const lbl = document.createElement("span");
+    lbl.textContent = d.name;
+    const x = document.createElement("span");
+    x.className = "x";
+    x.textContent = "\u00d7";
+    x.title = "Remove";
+    chip.appendChild(lbl);
+    chip.appendChild(x);
+    el.appendChild(chip);
+  });
+}
+
 function parseAndRender(text, name){
   const status = document.getElementById("status");
   try{
@@ -485,11 +687,8 @@ function parseAndRender(text, name){
       status.className = "error";
       return;
     }
-    currentData = data;
-    populateControls(data);
-    renderMeta(data, name);
-    renderAll();
-    status.textContent = "Loaded " + data.cases.length + " cases.";
+    addDataset(name, data);
+    status.textContent = "Loaded " + name + " (" + data.cases.length + " cases).";
     status.className = "";
     document.getElementById("dropzone").style.display = "none";
   }catch(err){
@@ -526,12 +725,39 @@ function bindEvents(){
 
   document.getElementById("saveAllBtn").addEventListener("click", saveAll);
   document.getElementById("exportBtn").addEventListener("click", exportCSV);
+  document.getElementById("exportSummaryBtn").addEventListener("click", exportSummary);
   document.querySelectorAll(".saveBtn").forEach(btn => {
     btn.addEventListener("click", () => saveChart(btn.dataset.chart));
   });
 
-  ["station", "mfPressure", "heatMetric", "fontSize", "unitSystem"].forEach(id => {
+  document.getElementById("themeSel").addEventListener("change", e => {
+    theme = e.target.value;
+    document.body.classList.toggle("light", theme === "light");
+    renderAll();
+  });
+
+  ["station", "mfPressure", "heatMetric", "fontSize", "unitSystem", "bestMetric", "compareMetric", "comparePressure"].forEach(id => {
     document.getElementById(id).addEventListener("change", renderAll);
+  });
+
+  document.getElementById("datasetList").addEventListener("click", e => {
+    const xBtn = e.target.closest(".x");
+    const chip = e.target.closest(".chip");
+    if(!chip) return;
+    const name = chip.dataset.name;
+    if(xBtn){
+      e.stopPropagation();
+      removeDataset(name);
+    } else {
+      const d = datasets.find(d => d.name === name);
+      if(d){
+        currentData = d.data;
+        populateControls(d.data);
+        renderMeta(d.data, name);
+        renderDatasetList();
+        renderAll();
+      }
+    }
   });
 
   const dz = document.getElementById("dropzone");
