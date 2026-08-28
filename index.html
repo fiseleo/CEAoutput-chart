@@ -161,15 +161,16 @@ function plotMassFractions(div, data, pin, station){
     const y = ofs.map(of => {
       const c = data.cases.find(c => c.pin === pin && c.of === of);
       const v = c && c.massfrac[sp] ? c.massfrac[sp][idx] : 0;
-      return v;
+      return v * 100;
     });
     return { x: ofs, y, mode: "lines", name: sp, type: "scatter",
-             stackgroup: "one", line: { width: 0.5 } };
+             stackgroup: "one", line: { width: 0.5 },
+             hovertemplate: sp + ": %{y:.2f}%" };
   });
   const layout = baseLayout(
     station === "chamber" ? "Chamber mass fractions" : "Throat mass fractions",
-    "O/F ratio", "Mass fraction");
-  layout.yaxis.range = [0, 1];
+    "O/F ratio", "Mass fraction (%)");
+  layout.yaxis.range = [0, 100];
   Plotly.newPlot(div, traces, layout, { responsive: true, displayModeBar: false });
 }
 
@@ -183,8 +184,8 @@ function plotHeatmap(div, data, field, station, title){
   const heat = { z, x: ofs, y: pins, type: "heatmap", colorscale: "Viridis", hoverongaps: false,
     colorbar: { title: { text: units[field] || field, side: "right" } } };
   const cont = { z, x: ofs, y: pins, type: "contour", showscale: false, hoverinfo: "skip",
-    contours: { coloring: "lines", showlabels: true, labelfont: { size: 10 } },
-    line: { color: "#8a8a8a", width: 1 } };
+    contours: { coloring: "lines", showlabels: true, labelfont: { size: 10, color: "#000000" } },
+    line: { color: "#000000", width: 1.2 } };
   Plotly.newPlot(div, [heat, cont], baseLayout(title, "O/F ratio", "Pressure (psia)"),
     { responsive: true, displayModeBar: false });
 }
