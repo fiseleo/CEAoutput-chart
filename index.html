@@ -49,6 +49,8 @@
   .datasets .chip .x{cursor:pointer;font-weight:700;opacity:.7}
   .datasets .chip .x:hover{opacity:1}
   .compareControls{display:flex;gap:8px;align-items:center}
+  .transportCard{display:none}
+  body.hasTransport .transportCard{display:block}
   #dataTableWrap{max-height:520px;overflow:auto}
   table.datatable{border-collapse:collapse;width:100%;font-size:12px}
   table.datatable th{position:sticky;top:0;background:var(--panel2);cursor:pointer;user-select:none;z-index:1}
@@ -113,6 +115,12 @@
         <option value="GAMMA">Gamma</option>
       </select>
     </label>
+    <label>Transport reactions
+      <select id="transportReaction">
+        <option value="frozen" selected>Frozen</option>
+        <option value="equil">Equilibrium</option>
+      </select>
+    </label>
     <label>Image format
       <select id="saveFormat">
         <option value="png" selected>PNG</option>
@@ -158,6 +166,9 @@
   <div class="card"><div class="card-head"><h2>Mass Fractions vs O/F</h2><button class="saveBtn" data-chart="chMF" title="Save as image">Save</button></div><div class="chart" id="chMF"></div></div>
   <div class="card full"><div class="card-head"><h2>Performance Map</h2><button class="saveBtn" data-chart="chHeat" title="Save as image">Save</button></div><div class="chart" id="chHeat"></div></div>
   <div class="card full"><div class="card-head"><h2>3D Surface</h2><button class="saveBtn" data-chart="chSurface" title="Save as image">Save</button></div><div class="chart" id="chSurface"></div></div>
+  <div class="card transportCard"><div class="card-head"><h2>Viscosity vs O/F</h2><button class="saveBtn" data-chart="chVisc" title="Save as image">Save</button></div><div class="chart" id="chVisc"></div></div>
+  <div class="card transportCard"><div class="card-head"><h2>Thermal Conductivity vs O/F</h2><button class="saveBtn" data-chart="chCond" title="Save as image">Save</button></div><div class="chart" id="chCond"></div></div>
+  <div class="card transportCard"><div class="card-head"><h2>Prandtl Number vs O/F</h2><button class="saveBtn" data-chart="chPrandtl" title="Save as image">Save</button></div><div class="chart" id="chPrandtl"></div></div>
   <div class="card full">
     <div class="card-head">
       <h2>Compare datasets</h2>
@@ -411,6 +422,36 @@ function plotSurface(div, data, field, station){
     layout, { responsive: true, displayModeBar: false });
 }
 
+function transportVal(c, field, station, reaction){
+  const t = c.transport;
+  if(!t) return undefined;
+  const idx = station === "chamber" ? 0 : 1;
+  if(field === "VISC") return t.viscosity ? t.viscosity[idx] : undefined;
+  const r = t[reaction];
+  if(!r) return undefined;
+  if(field === "COND") return r.cond ? r.cond[idx] : undefined;
+  if(field === "PRANDTL") return r.prandtl ? r.prandtl[idx] : undefined;
+  if(field === "TPCP") return r.cp ? r.cp[idx] : undefined;
+  return undefined;
+}
+
+function plotTransport(div, data, field, station, title, yTitle){
+  const reaction = document.getElementById("transportReaction").value;
+  const { pins } = getSorted(data);
+  const traces = pins.map(pin => {
+    const ofs = [...new Set(data.cases.filter(c => c.pin === pin).map(c => c.of))].sort((a,b) => a-b);
+    const x = [], y = [];
+    for(const of of ofs){
+      const c = data.cases.find(c => c.pin === pin && c.of === of);
+      const v = transportVal(c, field, station, reaction);
+      if(v !== undefined && !isNaN(v)){ x.push(of); y.push(v); }
+    }
+    return { x, y, mode: "lines+markers", name: pin + " psia", type: "scatter",
+             line: { width: 3 }, marker: { size: 5 } };
+  });
+  Plotly.newPlot(div, traces, baseLayout(title, "O/F ratio", yTitle), { responsive: true, displayModeBar: false });
+}
+
 function renderCompare(){
   const el = document.getElementById("chCompare");
   const metric = document.getElementById("compareMetric").value;
@@ -440,6 +481,9 @@ const CHART_DEFS = [
   { id: "chMF",     file: "MassFractions_vs_OF" },
   { id: "chHeat",   file: "Performance_Map" },
   { id: "chSurface", file: "3D_Surface" },
+  { id: "chVisc",   file: "Viscosity_vs_OF" },
+  { id: "chCond",   file: "Conductivity_vs_OF" },
+  { id: "chPrandtl", file: "Prandtl_vs_OF" },
   { id: "chCompare", file: "Compare" }
 ];
 
@@ -523,6 +567,12 @@ function exportCSV(){
   if(!currentData) return;
   const data = currentData;
   const species = [...new Set(data.cases.reduce((acc, c) => acc.concat(Object.keys(c.massfrac)), []))].sort();
+  const hasTp = data.meta.hasTransport;
+  const tpHeader = hasTp ? [
+    "VISC_c(mP)", "VISC_t(mP)",
+    "COND_equil_c(mW/cm/K)", "COND_equil_t(mW/cm/K)", "Pr_equil_c", "Pr_equil_t",
+    "COND_frozen_c(mW/cm/K)", "COND_frozen_t(mW/cm/K)", "Pr_frozen_c", "Pr_frozen_t"
+  ] : [];
   const header = [
     "Pin(psia)", "O/F",
     "Tc(" + unitLabel("T") + ")", "Tt(" + unitLabel("T") + ")",
@@ -530,7 +580,7 @@ function exportCSV(){
     "MWc(g/mol)", "MWt(g/mol)", "Gamma_c", "Gamma_t",
     "CSTAR(" + unitLabel("CSTAR") + ")", "CF",
     "Ivac(" + unitLabel("Ivac") + ")", "Isp(" + unitLabel("Isp") + ")"
-  ].concat(species.map(s => "c_" + s), species.map(s => "t_" + s));
+  ].concat(tpHeader, species.map(s => "c_" + s), species.map(s => "t_" + s));
 
   const rows = [header];
   const sorted = [...data.cases].sort((a,b) => (a.pin - b.pin) || (a.of - b.of));
@@ -544,6 +594,16 @@ function exportCSV(){
       convValue("CSTAR", c.perf.CSTAR), c.perf.CF,
       convValue("Ivac", c.perf.Ivac), convValue("Isp", c.perf.Isp)
     ];
+    if(hasTp){
+      const t = c.transport || {};
+      const v = t.viscosity || [];
+      const e = t.equil || {}, f = t.frozen || {};
+      row.push(v[0], v[1],
+        e.cond ? e.cond[0] : "", e.cond ? e.cond[1] : "",
+        e.prandtl ? e.prandtl[0] : "", e.prandtl ? e.prandtl[1] : "",
+        f.cond ? f.cond[0] : "", f.cond ? f.cond[1] : "",
+        f.prandtl ? f.prandtl[0] : "", f.prandtl ? f.prandtl[1] : "");
+    }
     species.forEach(s => row.push(c.massfrac[s] ? c.massfrac[s][0] : ""));
     species.forEach(s => row.push(c.massfrac[s] ? c.massfrac[s][1] : ""));
     rows.push(row);
@@ -704,6 +764,14 @@ function renderAll(){
   plotHeatmap("chHeat", data, heatMetric, station,
     (station === "chamber" ? "Chamber " : "Throat ") + heatTitles[heatMetric]);
   plotSurface("chSurface", data, heatMetric, station);
+  if(data.meta.hasTransport){
+    document.body.classList.add("hasTransport");
+    plotTransport("chVisc", data, "VISC", station, "Viscosity vs O/F", "Viscosity (millipoise)");
+    plotTransport("chCond", data, "COND", station, "Thermal conductivity vs O/F", "Conductivity (mW/(cm\u00b7K))");
+    plotTransport("chPrandtl", data, "PRANDTL", station, "Prandtl number vs O/F", "Prandtl number");
+  } else {
+    document.body.classList.remove("hasTransport");
+  }
   renderCompare();
   renderSummary(data);
   renderDataTable(data);
@@ -736,6 +804,7 @@ function renderMeta(data, name){
   if(m.problemType) parts.push(m.problemType);
   if(m.assumption) parts.push(m.assumption);
   if(m.compType) parts.push(m.compType === "mole" ? "mole fractions" : "mass fractions");
+  if(m.hasTransport) parts.push("transport properties");
   if(m.fuels.length) parts.push("Fuel: " + [...new Set(m.fuels)].join(", "));
   if(m.oxidizers.length) parts.push("Oxidizer: " + [...new Set(m.oxidizers)].join(", "));
   parts.push(data.cases.length + " cases (" + getSorted(data).pins.length + " pressures x " + getSorted(data).ofs.length + " O/F)");
@@ -859,7 +928,7 @@ function bindEvents(){
     renderAll();
   });
 
-  ["station", "mfPressure", "heatMetric", "fontSize", "unitSystem", "bestMetric", "compareMetric", "comparePressure"].forEach(id => {
+  ["station", "mfPressure", "heatMetric", "fontSize", "unitSystem", "bestMetric", "compareMetric", "comparePressure", "transportReaction"].forEach(id => {
     document.getElementById(id).addEventListener("change", renderAll);
   });
 

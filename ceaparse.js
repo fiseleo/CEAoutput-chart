@@ -62,9 +62,10 @@ var PERF_ALIASES = {
 function parseCEA(text){
   var lines = text.split(/\r?\n/);
   var cases = [];
-  var meta = { fuels: [], oxidizers: [], problemType: null, assumption: null, compType: "mass", options: [] };
+  var meta = { fuels: [], oxidizers: [], problemType: null, assumption: null, compType: "mass", options: [], hasTransport: false };
   var cur = null;
-  var mode = "none"; // none | props | perf | massfrac
+  var mode = "none"; // none | props | perf | massfrac | transport
+  var submode = null; // equil | frozen (within transport)
 
   for(var i = 0; i < lines.length; i++){
     var line = lines[i];
@@ -88,7 +89,7 @@ function parseCEA(text){
 
     var m = line.match(/Pin\s*=\s*([\d.]+)\s*PSIA/i);
     if(m){
-      cur = { pin: parseFloat(m[1]), chamber: {}, throat: {}, perf: {}, massfrac: {} };
+      cur = { pin: parseFloat(m[1]), chamber: {}, throat: {}, perf: {}, massfrac: {}, transport: {} };
       cases.push(cur);
       mode = "none";
       continue;
@@ -105,6 +106,12 @@ function parseCEA(text){
     }
 
     if(/CHAMBER\s+THROAT/.test(line)){ mode = "props"; continue; }
+    if(/TRANSPORT\s+PROPERTIES/.test(line)){
+      mode = "transport"; submode = null;
+      meta.hasTransport = true;
+      cur.transport = { viscosity: null, equil: {}, frozen: {} };
+      continue;
+    }
     if(/PERFORMANCE\s+PARAMETERS/.test(line)){ mode = "perf"; continue; }
     if(/MASS\s+FRACTIONS/.test(line)){ meta.compType = "mass"; mode = "massfrac"; continue; }
     if(/MOLE\s+FRACTIONS/.test(line)){ meta.compType = "mole"; mode = "massfrac"; continue; }
@@ -126,6 +133,16 @@ function parseCEA(text){
       var r3 = extractNumbers(line);
       if(r3.nums.length === 2 && r3.label && !/THERMODYNAMIC|NOTE/i.test(r3.label)){
         cur.massfrac[r3.label] = [r3.nums[0], r3.nums[1]];
+      }
+    } else if(mode === "transport"){
+      if(/WITH\s+EQUILIBRIUM\s+REACTIONS/.test(line)){ submode = "equil"; continue; }
+      if(/WITH\s+FROZEN\s+REACTIONS/.test(line)){ submode = "frozen"; continue; }
+      var r4 = extractNumbers(line);
+      if(r4.nums.length === 2 && r4.label){
+        if(/VISC/.test(r4.label)){ cur.transport.viscosity = [r4.nums[0], r4.nums[1]]; }
+        else if(/CONDUCTIVITY/.test(r4.label)){ if(submode) cur.transport[submode].cond = [r4.nums[0], r4.nums[1]]; }
+        else if(/PRANDTL/.test(r4.label)){ if(submode) cur.transport[submode].prandtl = [r4.nums[0], r4.nums[1]]; }
+        else if(/^Cp/.test(r4.label)){ if(submode) cur.transport[submode].cp = [r4.nums[0], r4.nums[1]]; }
       }
     }
   }
