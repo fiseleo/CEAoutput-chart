@@ -26,8 +26,11 @@
   .meta{color:var(--muted);font-size:13px;padding:12px 20px 0}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px;padding:16px 20px 40px}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
-  .card h2{font-size:14px;margin:0 0 6px;font-weight:600;color:var(--muted)}
-  .card .chart{width:100%;height:380px}
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 6px}
+  .card h2{font-size:14px;margin:0;font-weight:600;color:var(--muted)}
+  .card .chart{width:100%;height:420px}
+  .saveBtn{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px}
+  .saveBtn:hover{cursor:pointer;background:#384763}
   #status{color:var(--muted);font-size:13px}
   #status.error{color:#f87171}
 </style>
@@ -54,6 +57,15 @@
         <option value="GAMMA">Gamma</option>
       </select>
     </label>
+    <label>Image format
+      <select id="saveFormat">
+        <option value="png" selected>PNG</option>
+        <option value="svg">SVG</option>
+        <option value="jpeg">JPEG</option>
+        <option value="webp">WebP</option>
+      </select>
+    </label>
+    <button id="saveAllBtn">Save all charts</button>
     <input type="file" id="fileInput" accept=".txt,text/plain">
     <button id="reloadBtn" class="primary">Reload output.txt</button>
     <span id="status"></span>
@@ -62,12 +74,12 @@
 <div id="dropzone">Drop a CEA output .txt file here</div>
 <div class="meta" id="meta"></div>
 <div class="grid" id="charts">
-  <div class="card"><h2>Specific Impulse vs O/F</h2><div class="chart" id="chIsp"></div></div>
-  <div class="card"><h2>Temperature vs O/F</h2><div class="chart" id="chT"></div></div>
-  <div class="card"><h2>Characteristic Velocity C* vs O/F</h2><div class="chart" id="chCstar"></div></div>
-  <div class="card"><h2>Molecular Weight vs O/F</h2><div class="chart" id="chMW"></div></div>
-  <div class="card"><h2>Mass Fractions vs O/F</h2><div class="chart" id="chMF"></div></div>
-  <div class="card full"><h2>Performance Map</h2><div class="chart" id="chHeat"></div></div>
+  <div class="card"><div class="card-head"><h2>Specific Impulse vs O/F</h2><button class="saveBtn" data-chart="chIsp" title="Save as image">Save</button></div><div class="chart" id="chIsp"></div></div>
+  <div class="card"><div class="card-head"><h2>Temperature vs O/F</h2><button class="saveBtn" data-chart="chT" title="Save as image">Save</button></div><div class="chart" id="chT"></div></div>
+  <div class="card"><div class="card-head"><h2>Characteristic Velocity C* vs O/F</h2><button class="saveBtn" data-chart="chCstar" title="Save as image">Save</button></div><div class="chart" id="chCstar"></div></div>
+  <div class="card"><div class="card-head"><h2>Molecular Weight vs O/F</h2><button class="saveBtn" data-chart="chMW" title="Save as image">Save</button></div><div class="chart" id="chMW"></div></div>
+  <div class="card"><div class="card-head"><h2>Mass Fractions vs O/F</h2><button class="saveBtn" data-chart="chMF" title="Save as image">Save</button></div><div class="chart" id="chMF"></div></div>
+  <div class="card full"><div class="card-head"><h2>Performance Map</h2><button class="saveBtn" data-chart="chHeat" title="Save as image">Save</button></div><div class="chart" id="chHeat"></div></div>
 </div>
 
 <script>
@@ -118,15 +130,16 @@ function speciesForPin(data, pin, station){
 /* ---------------- layout & plot ---------------- */
 function baseLayout(title, xtitle, ytitle){
   return {
-    title: { text: title, font: { size: 13 } },
-    xaxis: { title: xtitle, gridcolor: "#334155" },
-    yaxis: { title: ytitle, gridcolor: "#334155" },
+    title: { text: title, font: { size: 15 } },
+    xaxis: { title: xtitle, gridcolor: "#475569", titlefont: { size: 14 }, tickfont: { size: 12 } },
+    yaxis: { title: ytitle, gridcolor: "#475569", titlefont: { size: 14 }, tickfont: { size: 12 } },
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)",
     font: { color: "#e2e8f0" },
     margin: { l: 62, r: 20, t: 32, b: 52 },
-    legend: { font: { size: 11 } },
-    hovermode: "closest"
+    legend: { font: { size: 12 } },
+    hovermode: "closest",
+    hoverlabel: { font: { size: 12 } }
   };
 }
 
@@ -135,7 +148,7 @@ function plotLines(div, data, field, station, yTitle, title){
   const traces = pins.map(pin => {
     const s = seriesFor(data, pin, station, field);
     return { x: s.x, y: s.y, mode: "lines+markers", name: pin + " psia", type: "scatter",
-             line: { width: 2 }, marker: { size: 4 } };
+             line: { width: 3 }, marker: { size: 5 } };
   });
   Plotly.newPlot(div, traces, baseLayout(title, "O/F ratio", yTitle), { responsive: true, displayModeBar: false });
 }
@@ -151,7 +164,7 @@ function plotMassFractions(div, data, pin, station){
       const v = c && c.massfrac[sp] ? c.massfrac[sp][idx] : undefined;
       if(v !== undefined && !isNaN(v)){ x.push(of); y.push(v); }
     }
-    return { x, y, mode: "lines", name: sp, type: "scatter", line: { width: 2 } };
+    return { x, y, mode: "lines", name: sp, type: "scatter", line: { width: 3 } };
   });
   Plotly.newPlot(div, traces, baseLayout(
     station === "chamber" ? "Chamber mass fractions" : "Throat mass fractions",
@@ -169,6 +182,45 @@ function plotHeatmap(div, data, field, station, title){
     colorbar: { title: { text: field, side: "right" } } };
   Plotly.newPlot(div, [trace], baseLayout(title, "O/F ratio", "Pressure (psia)"),
     { responsive: true, displayModeBar: false });
+}
+
+/* ---------------- save / export ---------------- */
+const CHART_DEFS = [
+  { id: "chIsp",   file: "Isp_vs_OF" },
+  { id: "chT",     file: "Temperature_vs_OF" },
+  { id: "chCstar", file: "Cstar_vs_OF" },
+  { id: "chMW",    file: "MW_vs_OF" },
+  { id: "chMF",    file: "MassFractions_vs_OF" },
+  { id: "chHeat",  file: "Performance_Map" }
+];
+
+function saveChart(id){
+  const gd = document.getElementById(id);
+  if(!gd || !gd.data) return;
+  const fmt = document.getElementById("saveFormat").value;
+  const def = CHART_DEFS.find(d => d.id === id);
+  Plotly.downloadImage(gd, {
+    format: fmt,
+    filename: "CEA_" + (def ? def.file : id),
+    width: 1200,
+    height: 700,
+    scale: 2
+  }).catch(err => console.error("Save failed:", err));
+}
+
+function saveAll(){
+  if(!currentData) return;
+  const status = document.getElementById("status");
+  const total = CHART_DEFS.length;
+  CHART_DEFS.forEach((d, i) => {
+    setTimeout(() => {
+      saveChart(d.id);
+      status.textContent = "Saving charts... " + (i + 1) + "/" + total;
+      if(i === total - 1){
+        setTimeout(() => { status.textContent = "Saved " + total + " charts."; }, 1500);
+      }
+    }, i * 600);
+  });
 }
 
 /* ---------------- render ---------------- */
@@ -266,6 +318,11 @@ function bindEvents(){
   });
 
   document.getElementById("reloadBtn").addEventListener("click", loadDefault);
+
+  document.getElementById("saveAllBtn").addEventListener("click", saveAll);
+  document.querySelectorAll(".saveBtn").forEach(btn => {
+    btn.addEventListener("click", () => saveChart(btn.dataset.chart));
+  });
 
   ["station", "mfPressure", "heatMetric"].forEach(id => {
     document.getElementById(id).addEventListener("change", renderAll);
