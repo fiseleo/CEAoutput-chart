@@ -118,9 +118,14 @@
   <div class="card full"><div class="card-head">
     <h2>Summary — best O/F by
       <select id="bestMetric" class="inlineSel">
-        <option value="Isp" selected>max Isp</option>
-        <option value="CSTAR">max C*</option>
-        <option value="T">max Tc</option>
+        <option value="max|Isp" selected>max Isp</option>
+        <option value="min|Isp">min Isp</option>
+        <option value="max|CSTAR">max C*</option>
+        <option value="min|CSTAR">min C*</option>
+        <option value="max|T">max Tc</option>
+        <option value="min|T">min Tc</option>
+        <option value="max|MW">max MW</option>
+        <option value="min|MW">min MW</option>
       </select>
     </h2>
     <button class="saveBtn" id="exportSummaryBtn" title="Export summary as CSV">Export CSV</button>
@@ -200,13 +205,16 @@ function speciesForPin(data, pin, station){
 }
 
 /* ---------------- units ---------------- */
+const G0 = 9.80665; // standard gravity, m/s^2
+
 function convValue(field, v){
-  if(unitSystem !== "imperial") return v;
   if(v === null || v === undefined || isNaN(v)) return v;
+  if(field === "Isp" || field === "Ivac") return v / G0;   // m/s -> s (divide by g)
+  if(unitSystem !== "imperial") return v;
   switch(field){
     case "T": return v * 9/5 - 459.67;                 // K -> deg F
     case "P": return v * 14.5038;                       // bar -> psi
-    case "Isp": case "Ivac": case "CSTAR": case "SONVEL":
+    case "CSTAR": case "SONVEL":
       return v * 3.28084;                               // m/s -> ft/s
     default: return v;
   }
@@ -216,8 +224,8 @@ function unitLabel(field){
   const imp = unitSystem === "imperial";
   if(field === "T") return imp ? "\u00b0F" : "K";
   if(field === "P") return imp ? "psi" : "bar";
-  if(field === "Isp" || field === "Ivac" || field === "CSTAR" || field === "SONVEL")
-    return imp ? "ft/s" : "m/s";
+  if(field === "Isp" || field === "Ivac") return "s";
+  if(field === "CSTAR" || field === "SONVEL") return imp ? "ft/s" : "m/s";
   if(field === "MW") return "g/mol";
   if(field === "GAMMA") return "";
   return "";
@@ -492,19 +500,21 @@ function exportCSV(){
 
 function bestVal(c, field){
   if(field === "T") return c.chamber.T;
+  if(field === "MW") return c.chamber.MW;
   if(field === "CSTAR" || field === "Isp") return c.perf[field];
   return undefined;
 }
 
-function summaryRows(data, metric){
+function summaryRows(data, dir, field){
   const { pins } = getSorted(data);
   const rows = [];
   for(const pin of pins){
-    let best = null, bv = -Infinity;
+    let best = null, bv = dir === "min" ? Infinity : -Infinity;
     for(const c of data.cases){
       if(c.pin !== pin) continue;
-      const v = bestVal(c, metric);
-      if(v !== undefined && v !== null && !isNaN(v) && v > bv){ bv = v; best = c; }
+      const v = bestVal(c, field);
+      if(v === undefined || v === null || isNaN(v)) continue;
+      if(dir === "min" ? (v < bv) : (v > bv)){ bv = v; best = c; }
     }
     if(best) rows.push({ pin, best });
   }
@@ -512,19 +522,20 @@ function summaryRows(data, metric){
 }
 
 function renderSummary(data){
-  const metric = document.getElementById("bestMetric").value;
+  const [dir, field] = document.getElementById("bestMetric").value.split("|");
   const uT = unitLabel("T"), uI = unitLabel("Isp"), uC = unitLabel("CSTAR");
   let html = "<table class='summary'><thead><tr>"
     + "<th>Pressure (psia)</th><th>Best O/F</th>"
-    + "<th>Isp (" + uI + ")</th><th>C* (" + uC + ")</th><th>Tc (" + uT + ")</th>"
+    + "<th>Isp (" + uI + ")</th><th>C* (" + uC + ")</th><th>Tc (" + uT + ")</th><th>MW (g/mol)</th>"
     + "</tr></thead><tbody>";
-  for(const { pin, best } of summaryRows(data, metric)){
+  for(const { pin, best } of summaryRows(data, dir, field)){
     html += "<tr>"
       + "<td>" + pin + "</td>"
       + "<td>" + best.of.toFixed(2) + "</td>"
       + "<td>" + convValue("Isp", best.perf.Isp).toFixed(1) + "</td>"
       + "<td>" + (best.perf.CSTAR != null ? convValue("CSTAR", best.perf.CSTAR).toFixed(1) : "-") + "</td>"
       + "<td>" + (best.chamber.T != null ? convValue("T", best.chamber.T).toFixed(1) : "-") + "</td>"
+      + "<td>" + (best.chamber.MW != null ? best.chamber.MW.toFixed(2) : "-") + "</td>"
       + "</tr>";
   }
   html += "</tbody></table>";
@@ -534,16 +545,17 @@ function renderSummary(data){
 function exportSummary(){
   if(!currentData) return;
   const data = currentData;
-  const metric = document.getElementById("bestMetric").value;
+  const [dir, field] = document.getElementById("bestMetric").value.split("|");
   const uT = unitLabel("T"), uI = unitLabel("Isp"), uC = unitLabel("CSTAR");
-  const header = ["Pressure(psia)", "Best O/F", "Isp(" + uI + ")", "CSTAR(" + uC + ")", "Tc(" + uT + ")"];
+  const header = ["Pressure(psia)", "Best O/F", "Isp(" + uI + ")", "CSTAR(" + uC + ")", "Tc(" + uT + ")", "MW(g/mol)"];
   const rows = [header];
-  for(const { pin, best } of summaryRows(data, metric)){
+  for(const { pin, best } of summaryRows(data, dir, field)){
     rows.push([
       pin, best.of,
       convValue("Isp", best.perf.Isp),
       best.perf.CSTAR != null ? convValue("CSTAR", best.perf.CSTAR) : "",
-      best.chamber.T != null ? convValue("T", best.chamber.T) : ""
+      best.chamber.T != null ? convValue("T", best.chamber.T) : "",
+      best.chamber.MW != null ? best.chamber.MW : ""
     ]);
   }
   const csv = rows.map(r => r.map(csvCell).join(",")).join("\r\n");
