@@ -45,6 +45,15 @@
         <option value="throat">Throat</option>
       </select>
     </label>
+    <label>Font size
+      <select id="fontSize">
+        <option value="12">Small</option>
+        <option value="14" selected>Medium</option>
+        <option value="16">Large</option>
+        <option value="18">X-Large</option>
+        <option value="20">XX-Large</option>
+      </select>
+    </label>
     <label>Mass fraction pressure
       <select id="mfPressure"></select>
     </label>
@@ -129,17 +138,18 @@ function speciesForPin(data, pin, station){
 
 /* ---------------- layout & plot ---------------- */
 function baseLayout(title, xtitle, ytitle){
+  const fs = fontBase;
   return {
-    title: { text: title, font: { size: 15 } },
-    xaxis: { title: xtitle, gridcolor: "#475569", titlefont: { size: 14 }, tickfont: { size: 12 } },
-    yaxis: { title: ytitle, gridcolor: "#475569", titlefont: { size: 14 }, tickfont: { size: 12 } },
+    title: { text: title, font: { size: fs + 1 } },
+    xaxis: { title: xtitle, gridcolor: "#475569", titlefont: { size: fs }, tickfont: { size: fs - 2 } },
+    yaxis: { title: ytitle, gridcolor: "#475569", titlefont: { size: fs }, tickfont: { size: fs - 2 } },
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)",
     font: { color: "#e2e8f0" },
     margin: { l: 62, r: 20, t: 32, b: 52 },
-    legend: { font: { size: 12 } },
+    legend: { font: { size: fs - 2 } },
     hovermode: "closest",
-    hoverlabel: { font: { size: 12 } }
+    hoverlabel: { font: { size: fs - 2 } }
   };
 }
 
@@ -184,7 +194,7 @@ function plotHeatmap(div, data, field, station, title){
   const heat = { z, x: ofs, y: pins, type: "heatmap", colorscale: "Viridis", hoverongaps: false,
     colorbar: { title: { text: units[field] || field, side: "right" } } };
   const cont = { z, x: ofs, y: pins, type: "contour", showscale: false, hoverinfo: "skip",
-    contours: { coloring: "lines", showlabels: true, labelfont: { size: 10, color: "#000000" } },
+    contours: { coloring: "lines", showlabels: true, labelfont: { size: Math.max(8, fontBase - 4), color: "#000000" } },
     line: { color: "#000000", width: 1.2 } };
   Plotly.newPlot(div, [heat, cont], baseLayout(title, "O/F ratio", "Pressure (psia)"),
     { responsive: true, displayModeBar: false });
@@ -254,9 +264,11 @@ function saveAll(){
 
 /* ---------------- render ---------------- */
 let currentData = null;
+let fontBase = 14;
 
 function renderAll(){
   if(!currentData) return;
+  fontBase = parseInt(document.getElementById("fontSize").value, 10);
   const data = currentData;
   const station = document.getElementById("station").value;
   const mfPin = parseFloat(document.getElementById("mfPressure").value);
@@ -353,7 +365,7 @@ function bindEvents(){
     btn.addEventListener("click", () => saveChart(btn.dataset.chart));
   });
 
-  ["station", "mfPressure", "heatMetric"].forEach(id => {
+  ["station", "mfPressure", "heatMetric", "fontSize"].forEach(id => {
     document.getElementById(id).addEventListener("change", renderAll);
   });
 
