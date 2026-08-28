@@ -158,18 +158,19 @@ function plotMassFractions(div, data, pin, station){
   const ofs = [...new Set(data.cases.filter(c => c.pin === pin).map(c => c.of))].sort((a,b) => a-b);
   const species = speciesForPin(data, pin, station);
   const traces = species.map(sp => {
-    const x = [], y = [];
-    for(const of of ofs){
+    const y = ofs.map(of => {
       const c = data.cases.find(c => c.pin === pin && c.of === of);
-      const v = c && c.massfrac[sp] ? c.massfrac[sp][idx] : undefined;
-      if(v !== undefined && !isNaN(v)){ x.push(of); y.push(v); }
-    }
-    return { x, y, mode: "lines", name: sp, type: "scatter", line: { width: 3 } };
+      const v = c && c.massfrac[sp] ? c.massfrac[sp][idx] : 0;
+      return v;
+    });
+    return { x: ofs, y, mode: "lines", name: sp, type: "scatter",
+             stackgroup: "one", line: { width: 0.5 } };
   });
-  Plotly.newPlot(div, traces, baseLayout(
+  const layout = baseLayout(
     station === "chamber" ? "Chamber mass fractions" : "Throat mass fractions",
-    "O/F ratio", "Mass fraction"
-  ), { responsive: true, displayModeBar: false });
+    "O/F ratio", "Mass fraction");
+  layout.yaxis.range = [0, 1];
+  Plotly.newPlot(div, traces, layout, { responsive: true, displayModeBar: false });
 }
 
 function plotHeatmap(div, data, field, station, title){
@@ -178,9 +179,13 @@ function plotHeatmap(div, data, field, station, title){
     const c = data.cases.find(c => c.pin === pin && c.of === of);
     return c ? getVal(c, station, field) : null;
   }));
-  const trace = { z, x: ofs, y: pins, type: "heatmap", colorscale: "Viridis",
-    colorbar: { title: { text: field, side: "right" } } };
-  Plotly.newPlot(div, [trace], baseLayout(title, "O/F ratio", "Pressure (psia)"),
+  const units = { Isp: "Isp (m/s)", T: "T (K)", CSTAR: "C* (m/s)", MW: "MW (g/mol)", GAMMA: "Gamma" };
+  const heat = { z, x: ofs, y: pins, type: "heatmap", colorscale: "Viridis", hoverongaps: false,
+    colorbar: { title: { text: units[field] || field, side: "right" } } };
+  const cont = { z, x: ofs, y: pins, type: "contour", showscale: false, hoverinfo: "skip",
+    contours: { coloring: "lines", showlabels: true, labelfont: { size: 10 } },
+    line: { color: "#8a8a8a", width: 1 } };
+  Plotly.newPlot(div, [heat, cont], baseLayout(title, "O/F ratio", "Pressure (psia)"),
     { responsive: true, displayModeBar: false });
 }
 
@@ -194,18 +199,41 @@ const CHART_DEFS = [
   { id: "chHeat",  file: "Performance_Map" }
 ];
 
-function saveChart(id){
+const DARK_THEME = {
+  paper_bgcolor: "rgba(0,0,0,0)",
+  plot_bgcolor: "rgba(0,0,0,0)",
+  font: { color: "#e2e8f0" },
+  "xaxis.gridcolor": "#475569",
+  "yaxis.gridcolor": "#475569"
+};
+
+const LIGHT_THEME = {
+  paper_bgcolor: "#ffffff",
+  plot_bgcolor: "#ffffff",
+  font: { color: "#000000" },
+  "xaxis.gridcolor": "#cccccc",
+  "yaxis.gridcolor": "#cccccc"
+};
+
+async function saveChart(id){
   const gd = document.getElementById(id);
   if(!gd || !gd.data) return;
   const fmt = document.getElementById("saveFormat").value;
   const def = CHART_DEFS.find(d => d.id === id);
-  Plotly.downloadImage(gd, {
-    format: fmt,
-    filename: "CEA_" + (def ? def.file : id),
-    width: 1200,
-    height: 700,
-    scale: 2
-  }).catch(err => console.error("Save failed:", err));
+  try{
+    await Plotly.relayout(gd, LIGHT_THEME);
+    await Plotly.downloadImage(gd, {
+      format: fmt,
+      filename: "CEA_" + (def ? def.file : id),
+      width: 1200,
+      height: 700,
+      scale: 2
+    });
+  }catch(err){
+    console.error("Save failed:", err);
+  }finally{
+    await Plotly.relayout(gd, DARK_THEME);
+  }
 }
 
 function saveAll(){
