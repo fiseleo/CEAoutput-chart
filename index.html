@@ -26,11 +26,17 @@
   .meta{color:var(--muted);font-size:13px;padding:12px 20px 0}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px;padding:16px 20px 40px}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .card.full{grid-column:1/-1}
   .card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 6px}
   .card h2{font-size:14px;margin:0;font-weight:600;color:var(--muted)}
   .card .chart{width:100%;height:420px}
   .saveBtn{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px}
   .saveBtn:hover{cursor:pointer;background:#384763}
+  #summaryTable{overflow-x:auto}
+  table.summary{width:100%;border-collapse:collapse;font-size:13px}
+  table.summary th,table.summary td{border:1px solid var(--border);padding:6px 10px;text-align:right}
+  table.summary th{background:var(--panel2);color:var(--text);font-weight:600}
+  table.summary td:first-child,table.summary th:first-child{text-align:left}
   #status{color:var(--muted);font-size:13px}
   #status.error{color:#f87171}
 </style>
@@ -54,6 +60,13 @@
         <option value="20">XX-Large</option>
       </select>
     </label>
+    <label>Units
+      <select id="unitSystem">
+        <option value="si" selected>SI</option>
+        <option value="imperial">Imperial</option>
+      </select>
+    </label>
+    <button id="exportBtn">Export CSV</button>
     <label>Mass fraction pressure
       <select id="mfPressure"></select>
     </label>
@@ -83,6 +96,7 @@
 <div id="dropzone">Drop a CEA output .txt file here</div>
 <div class="meta" id="meta"></div>
 <div class="grid" id="charts">
+  <div class="card full"><div class="card-head"><h2>Summary — best O/F (max Isp)</h2></div><div id="summaryTable"></div></div>
   <div class="card"><div class="card-head"><h2>Specific Impulse vs O/F</h2><button class="saveBtn" data-chart="chIsp" title="Save as image">Save</button></div><div class="chart" id="chIsp"></div></div>
   <div class="card"><div class="card-head"><h2>Temperature vs O/F</h2><button class="saveBtn" data-chart="chT" title="Save as image">Save</button></div><div class="chart" id="chT"></div></div>
   <div class="card"><div class="card-head"><h2>Characteristic Velocity C* vs O/F</h2><button class="saveBtn" data-chart="chCstar" title="Save as image">Save</button></div><div class="chart" id="chCstar"></div></div>
@@ -136,6 +150,40 @@ function speciesForPin(data, pin, station){
     .slice(0, 14);
 }
 
+/* ---------------- units ---------------- */
+function convValue(field, v){
+  if(unitSystem !== "imperial") return v;
+  if(v === null || v === undefined || isNaN(v)) return v;
+  switch(field){
+    case "T": return v * 9/5 - 459.67;                 // K -> deg F
+    case "P": return v * 14.5038;                       // bar -> psi
+    case "Isp": case "Ivac": case "CSTAR": case "SONVEL":
+      return v * 3.28084;                               // m/s -> ft/s
+    default: return v;
+  }
+}
+
+function unitLabel(field){
+  const imp = unitSystem === "imperial";
+  if(field === "T") return imp ? "\u00b0F" : "K";
+  if(field === "P") return imp ? "psi" : "bar";
+  if(field === "Isp" || field === "Ivac" || field === "CSTAR" || field === "SONVEL")
+    return imp ? "ft/s" : "m/s";
+  if(field === "MW") return "g/mol";
+  if(field === "GAMMA") return "";
+  return "";
+}
+
+const FIELD_NAMES = {
+  Isp: "Isp", Ivac: "Ivac", T: "Temperature", P: "Pressure",
+  CSTAR: "C*", MW: "Molecular weight", GAMMA: "Specific heat ratio", SONVEL: "Sound velocity"
+};
+
+function yTitleFor(field){
+  const u = unitLabel(field);
+  return (FIELD_NAMES[field] || field) + (u ? " (" + u + ")" : "");
+}
+
 /* ---------------- layout & plot ---------------- */
 function baseLayout(title, xtitle, ytitle){
   const fs = fontBase;
@@ -153,18 +201,41 @@ function baseLayout(title, xtitle, ytitle){
   };
 }
 
-function plotLines(div, data, field, station, yTitle, title){
+function bestPoint(data, pin, station, field){
+  const s = seriesFor(data, pin, station, field);
+  if(!s.x.length) return null;
+  let bi = 0;
+  for(let i = 1; i < s.y.length; i++) if(s.y[i] > s.y[bi]) bi = i;
+  return { x: s.x[bi], y: s.y[bi] };
+}
+
+function plotLines(div, data, field, station, title, markBest){
   const { pins } = getSorted(data);
+  const yTitle = yTitleFor(field);
   const traces = pins.map(pin => {
     const s = seriesFor(data, pin, station, field);
-    return { x: s.x, y: s.y, mode: "lines+markers", name: pin + " psia", type: "scatter",
+    const y = s.y.map(v => convValue(field, v));
+    return { x: s.x, y, mode: "lines+markers", name: pin + " psia", type: "scatter",
              line: { width: 3 }, marker: { size: 5 } };
   });
+  if(markBest){
+    const bx = [], by = [];
+    pins.forEach(pin => {
+      const p = bestPoint(data, pin, station, field);
+      if(p){ bx.push(p.x); by.push(convValue(field, p.y)); }
+    });
+    traces.push({
+      x: bx, y: by, mode: "markers", type: "scatter", name: "Best O/F",
+      marker: { size: 13, symbol: "star", color: "#fbbf24", line: { width: 1, color: "#000000" } },
+      hovertemplate: "O/F %{x:.3f}<br>" + yTitle + " %{y:.2f}<extra>Best O/F</extra>"
+    });
+  }
   Plotly.newPlot(div, traces, baseLayout(title, "O/F ratio", yTitle), { responsive: true, displayModeBar: false });
 }
 
 function plotMassFractions(div, data, pin, station){
   const idx = station === "chamber" ? 0 : 1;
+  const comp = data.meta.compType === "mole" ? "mole" : "mass";
   const ofs = [...new Set(data.cases.filter(c => c.pin === pin).map(c => c.of))].sort((a,b) => a-b);
   const species = speciesForPin(data, pin, station);
   const traces = species.map(sp => {
@@ -178,8 +249,8 @@ function plotMassFractions(div, data, pin, station){
              hovertemplate: sp + ": %{y:.2f}%" };
   });
   const layout = baseLayout(
-    station === "chamber" ? "Chamber mass fractions" : "Throat mass fractions",
-    "O/F ratio", "Mass fraction (%)");
+    (station === "chamber" ? "Chamber " : "Throat ") + comp + " fractions",
+    "O/F ratio", (comp === "mole" ? "Mole fraction (%)" : "Mass fraction (%)"));
   layout.yaxis.range = [0, 100];
   Plotly.newPlot(div, traces, layout, { responsive: true, displayModeBar: false });
 }
@@ -188,11 +259,11 @@ function plotHeatmap(div, data, field, station, title){
   const { pins, ofs } = getSorted(data);
   const z = pins.map(pin => ofs.map(of => {
     const c = data.cases.find(c => c.pin === pin && c.of === of);
-    return c ? getVal(c, station, field) : null;
+    const v = c ? getVal(c, station, field) : null;
+    return v == null ? null : convValue(field, v);
   }));
-  const units = { Isp: "Isp (m/s)", T: "T (K)", CSTAR: "C* (m/s)", MW: "MW (g/mol)", GAMMA: "Gamma" };
   const heat = { z, x: ofs, y: pins, type: "heatmap", colorscale: "Viridis", hoverongaps: false,
-    colorbar: { title: { text: units[field] || field, side: "right" } } };
+    colorbar: { title: { text: unitLabel(field) || field, side: "right" } } };
   const cont = { z, x: ofs, y: pins, type: "contour", showscale: false, hoverinfo: "skip",
     contours: { coloring: "lines", showlabels: true, labelfont: { size: Math.max(8, fontBase - 4), color: "#000000" } },
     line: { color: "#000000", width: 1.2 } };
@@ -262,32 +333,123 @@ function saveAll(){
   });
 }
 
+/* ---------------- data export ---------------- */
+function csvCell(v){
+  if(v === null || v === undefined) return "";
+  let s;
+  if(typeof v === "number"){
+    if(!isFinite(v)) return "";
+    s = String(Number(v.toPrecision(8)));
+  } else {
+    s = String(v);
+  }
+  if(/[",\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function downloadText(text, filename, mime){
+  const blob = new Blob(["\ufeff" + text], { type: mime + ";charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportCSV(){
+  if(!currentData) return;
+  const data = currentData;
+  const species = [...new Set(data.cases.reduce((acc, c) => acc.concat(Object.keys(c.massfrac)), []))].sort();
+  const header = [
+    "Pin(psia)", "O/F",
+    "Tc(" + unitLabel("T") + ")", "Tt(" + unitLabel("T") + ")",
+    "Pc(" + unitLabel("P") + ")", "Pt(" + unitLabel("P") + ")",
+    "MWc(g/mol)", "MWt(g/mol)", "Gamma_c", "Gamma_t",
+    "CSTAR(" + unitLabel("CSTAR") + ")", "CF",
+    "Ivac(" + unitLabel("Ivac") + ")", "Isp(" + unitLabel("Isp") + ")"
+  ].concat(species.map(s => "mf_" + s));
+
+  const rows = [header];
+  const sorted = [...data.cases].sort((a,b) => (a.pin - b.pin) || (a.of - b.of));
+  for(const c of sorted){
+    const row = [
+      c.pin, c.of,
+      convValue("T", c.chamber.T), convValue("T", c.throat.T),
+      convValue("P", c.chamber.P), convValue("P", c.throat.P),
+      c.chamber.MW, c.throat.MW,
+      c.chamber.GAMMA, c.throat.GAMMA,
+      convValue("CSTAR", c.perf.CSTAR), c.perf.CF,
+      convValue("Ivac", c.perf.Ivac), convValue("Isp", c.perf.Isp)
+    ];
+    species.forEach(s => row.push(c.massfrac[s] ? c.massfrac[s][0] : ""));
+    rows.push(row);
+  }
+  const csv = rows.map(r => r.map(csvCell).join(",")).join("\r\n");
+  downloadText(csv, "CEA_data.csv", "text/csv");
+  document.getElementById("status").textContent = "Exported CEA_data.csv (" + (rows.length - 1) + " rows).";
+}
+
+function renderSummary(data){
+  const { pins } = getSorted(data);
+  const uT = unitLabel("T"), uI = unitLabel("Isp"), uC = unitLabel("CSTAR");
+  let html = "<table class='summary'><thead><tr>"
+    + "<th>Pressure (psia)</th><th>Best O/F</th>"
+    + "<th>Isp (" + uI + ")</th><th>C* (" + uC + ")</th><th>Tc (" + uT + ")</th>"
+    + "</tr></thead><tbody>";
+  for(const pin of pins){
+    let best = null;
+    for(const c of data.cases){
+      if(c.pin === pin && c.perf.Isp !== undefined && (!best || c.perf.Isp > best.perf.Isp)) best = c;
+    }
+    if(!best) continue;
+    html += "<tr>"
+      + "<td>" + pin + "</td>"
+      + "<td>" + best.of.toFixed(2) + "</td>"
+      + "<td>" + convValue("Isp", best.perf.Isp).toFixed(1) + "</td>"
+      + "<td>" + (best.perf.CSTAR != null ? convValue("CSTAR", best.perf.CSTAR).toFixed(1) : "-") + "</td>"
+      + "<td>" + (best.chamber.T != null ? convValue("T", best.chamber.T).toFixed(1) : "-") + "</td>"
+      + "</tr>";
+  }
+  html += "</tbody></table>";
+  document.getElementById("summaryTable").innerHTML = html;
+}
+
 /* ---------------- render ---------------- */
 let currentData = null;
 let fontBase = 14;
+let unitSystem = "si";
 
 function renderAll(){
   if(!currentData) return;
   fontBase = parseInt(document.getElementById("fontSize").value, 10);
+  unitSystem = document.getElementById("unitSystem").value;
   const data = currentData;
   const station = document.getElementById("station").value;
   const mfPin = parseFloat(document.getElementById("mfPressure").value);
   const heatMetric = document.getElementById("heatMetric").value;
 
-  const heatTitles = { Isp: "Specific Impulse (m/s)", T: "Temperature (K)",
-    CSTAR: "Characteristic Velocity C* (m/s)", MW: "Molecular Weight (g/mol)", GAMMA: "Specific Heat Ratio" };
+  const heatTitles = {
+    Isp: "Specific Impulse (" + unitLabel("Isp") + ")",
+    T: "Temperature (" + unitLabel("T") + ")",
+    CSTAR: "Characteristic Velocity C* (" + unitLabel("CSTAR") + ")",
+    MW: "Molecular Weight (g/mol)",
+    GAMMA: "Specific Heat Ratio"
+  };
 
-  plotLines("chIsp", data, "Isp", station, "Isp (m/s)",
-    "Specific Impulse vs O/F");
-  plotLines("chT", data, "T", station, "Temperature (K)",
-    (station === "chamber" ? "Chamber" : "Throat") + " temperature vs O/F");
-  plotLines("chCstar", data, "CSTAR", station, "C* (m/s)",
-    "Characteristic velocity C* vs O/F");
-  plotLines("chMW", data, "MW", station, "Molecular weight (g/mol)",
-    (station === "chamber" ? "Chamber" : "Throat") + " molecular weight vs O/F");
+  plotLines("chIsp", data, "Isp", station, "Specific Impulse vs O/F", true);
+  plotLines("chT", data, "T", station,
+    (station === "chamber" ? "Chamber" : "Throat") + " temperature vs O/F", true);
+  plotLines("chCstar", data, "CSTAR", station,
+    "Characteristic velocity C* vs O/F", true);
+  plotLines("chMW", data, "MW", station,
+    (station === "chamber" ? "Chamber" : "Throat") + " molecular weight vs O/F", false);
   plotMassFractions("chMF", data, mfPin, station);
   plotHeatmap("chHeat", data, heatMetric, station,
     (station === "chamber" ? "Chamber " : "Throat ") + heatTitles[heatMetric]);
+  renderSummary(data);
 }
 
 function populateControls(data){
@@ -306,6 +468,8 @@ function renderMeta(data, name){
   const m = data.meta;
   const parts = [];
   if(m.problemType) parts.push(m.problemType);
+  if(m.assumption) parts.push(m.assumption);
+  if(m.compType) parts.push(m.compType === "mole" ? "mole fractions" : "mass fractions");
   if(m.fuels.length) parts.push("Fuel: " + [...new Set(m.fuels)].join(", "));
   if(m.oxidizers.length) parts.push("Oxidizer: " + [...new Set(m.oxidizers)].join(", "));
   parts.push(data.cases.length + " cases (" + getSorted(data).pins.length + " pressures x " + getSorted(data).ofs.length + " O/F)");
@@ -361,11 +525,12 @@ function bindEvents(){
   document.getElementById("reloadBtn").addEventListener("click", loadDefault);
 
   document.getElementById("saveAllBtn").addEventListener("click", saveAll);
+  document.getElementById("exportBtn").addEventListener("click", exportCSV);
   document.querySelectorAll(".saveBtn").forEach(btn => {
     btn.addEventListener("click", () => saveChart(btn.dataset.chart));
   });
 
-  ["station", "mfPressure", "heatMetric", "fontSize"].forEach(id => {
+  ["station", "mfPressure", "heatMetric", "fontSize", "unitSystem"].forEach(id => {
     document.getElementById(id).addEventListener("change", renderAll);
   });
 

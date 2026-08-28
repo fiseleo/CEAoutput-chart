@@ -62,12 +62,17 @@ var PERF_ALIASES = {
 function parseCEA(text){
   var lines = text.split(/\r?\n/);
   var cases = [];
-  var meta = { fuels: [], oxidizers: [], problemType: null };
+  var meta = { fuels: [], oxidizers: [], problemType: null, assumption: null, compType: "mass", options: [] };
   var cur = null;
   var mode = "none"; // none | props | perf | massfrac
 
   for(var i = 0; i < lines.length; i++){
     var line = lines[i];
+
+    // assumption (equilibrium / frozen) - appears in each section header
+    if(!meta.assumption && /ASSUMING\s+(EQUILIBRIUM|FROZEN)/i.test(line)){
+      meta.assumption = /FROZEN/i.test(line) ? "Frozen" : "Equilibrium";
+    }
 
     // meta (only from the file header, before the first case)
     if(!cur){
@@ -77,6 +82,8 @@ function parseCEA(text){
       if(mm) meta.fuels.push(mm[1]);
       mm = line.match(/^\s*oxid\s+(\S+)/i);
       if(mm) meta.oxidizers.push(mm[1]);
+      mm = line.match(/^\s*output\s+(\S+)/i);
+      if(mm) meta.options.push(mm[1]);
     }
 
     var m = line.match(/Pin\s*=\s*([\d.]+)\s*PSIA/i);
@@ -99,8 +106,8 @@ function parseCEA(text){
 
     if(/CHAMBER\s+THROAT/.test(line)){ mode = "props"; continue; }
     if(/PERFORMANCE\s+PARAMETERS/.test(line)){ mode = "perf"; continue; }
-    if(/MASS\s+FRACTIONS/.test(line)){ mode = "massfrac"; continue; }
-    if(/MOLE\s+FRACTIONS/.test(line)){ mode = "massfrac"; continue; }
+    if(/MASS\s+FRACTIONS/.test(line)){ meta.compType = "mass"; mode = "massfrac"; continue; }
+    if(/MOLE\s+FRACTIONS/.test(line)){ meta.compType = "mole"; mode = "massfrac"; continue; }
 
     if(mode === "props"){
       var r = extractNumbers(line);
